@@ -1,0 +1,18 @@
+.report-panel {
+	padding: 0;
+}
+
+.report-content {
+	font-size: 0.8125rem;
+	color: #374151;
+	line-height: 1.6;
+	white-space: pre-wrap;
+}
+
+.report-loading,
+.report-empty {
+	color: #9ca3af;
+	font-size: 0.875rem;
+	padding: 1rem 0;
+	text-align: center;
+}

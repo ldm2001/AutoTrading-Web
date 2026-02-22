@@ -1,0 +1,128 @@
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--color-border);
+	padding: 0.375rem 0.75rem;
+	flex-shrink: 0;
+	background: #ffffff;
+}
+
+.header-title {
+	font-size: 1rem;
+	font-weight: 700;
+	color: #111827;
+}
+
+.header-subtitle {
+	font-size: 0.625rem;
+	color: #9ca3af;
+}
+
+.header-right {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.header-time {
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.75rem;
+	color: #6b7280;
+}
+
+.status-group {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.status-item {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.status-dot {
+	display: inline-block;
+	width: 0.4375rem;
+	height: 0.4375rem;
+	border-radius: 9999px;
+	transition: background-color 0.3s ease;
+}
+
+.status-dot.on {
+	background-color: var(--color-success);
+}
+
+.status-dot.off {
+	background-color: #d1d5db;
+}
+
+.status-label {
+	font-size: 0.6875rem;
+	color: #6b7280;
+}
+
+/* Trading Toggle Switch */
+.trading-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	background: none;
+	border: 1px solid var(--color-border);
+	border-radius: 1rem;
+	padding: 0.1875rem 0.5rem 0.1875rem 0.25rem;
+	cursor: pointer;
+	transition: border-color 0.2s;
+}
+
+.trading-toggle:hover {
+	border-color: #9ca3af;
+}
+
+.trading-toggle:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.toggle-track {
+	display: flex;
+	align-items: center;
+	width: 1.75rem;
+	height: 1rem;
+	background: #d1d5db;
+	border-radius: 0.5rem;
+	padding: 0.125rem;
+	transition: background-color 0.2s;
+}
+
+.trading-toggle.active .toggle-track {
+	background: var(--color-success);
+}
+
+.toggle-thumb {
+	display: block;
+	width: 0.75rem;
+	height: 0.75rem;
+	background: white;
+	border-radius: 50%;
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+	box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+	will-change: transform;
+}
+
+.trading-toggle.active .toggle-thumb {
+	transform: translateX(0.75rem);
+}
+
+.toggle-label {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	color: #6b7280;
+	transition: color 0.2s ease;
+}
+
+.trading-toggle.active .toggle-label {
+	color: var(--color-success);
+}

@@ -1,0 +1,141 @@
+.chart-wrap {
+	flex: 1;
+	min-height: 0;
+	border-radius: 0.5rem;
+	border: 1px solid #e5e7eb;
+	background-color: #ffffff;
+	padding: 0.75rem 1rem;
+	display: flex;
+	flex-direction: column;
+}
+
+.chart-container {
+	flex: 1;
+	min-height: 0;
+}
+
+.chart-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 0.5rem;
+}
+
+.chart-title {
+	font-size: 1rem;
+	font-weight: 700;
+	color: #111827;
+}
+
+.chart-subtitle {
+	font-size: 0.6875rem;
+	color: #9ca3af;
+}
+
+.chart-price {
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: #111827;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.chart-change {
+	font-size: 0.8125rem;
+	font-weight: 500;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.chart-change.up {
+	color: #ef4444;
+}
+
+.chart-change.down {
+	color: #3b82f6;
+}
+
+.chart-change.flat {
+	color: #9ca3af;
+}
+
+/* Legend (matplotlib style) */
+.chart-legend {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.legend-item {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: 0.6875rem;
+	color: #4b5563;
+	font-weight: 500;
+}
+
+.legend-line {
+	width: 16px;
+	height: 2.5px;
+	border-radius: 1px;
+}
+
+.legend-line.green {
+	background: #16a34a;
+	height: 2px;
+	border-style: dashed;
+}
+
+/* 상승/하락 세그먼트 범례 */
+.legend-seg {
+	display: inline-block;
+	width: 8px;
+	height: 2.5px;
+	border-radius: 1px;
+}
+.legend-seg.up { background: #ef4444; }
+.legend-seg.down { background: #2563eb; }
+
+.legend-bar {
+	width: 6px;
+	height: 10px;
+	background: rgba(156, 163, 175, 0.4);
+	border-radius: 1px;
+}
+
+/* Stock Details - Google Finance style */
+.stock-details {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 0 1rem;
+	padding-top: 0.625rem;
+	margin-top: 0.5rem;
+	border-top: 1px solid #f3f4f6;
+}
+
+.detail-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.25rem 0;
+	border-bottom: 1px solid #f9fafb;
+}
+
+.detail-label {
+	font-size: 0.6875rem;
+	color: #9ca3af;
+}
+
+.detail-value {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	color: #374151;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.detail-value.up {
+	color: #ef4444;
+}
+
+.detail-value.down {
+	color: #3b82f6;
+}

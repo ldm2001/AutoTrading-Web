@@ -1,0 +1,185 @@
+.app-shell {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+}
+
+.app-main {
+	flex: 1;
+	overflow: hidden;
+	padding: 0.375rem 0.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
+}
+
+/* --- Stock Info Bar --- */
+.info-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.375rem 0.75rem;
+	background: #ffffff;
+	border: 1px solid var(--color-border);
+	border-radius: 0.25rem;
+	flex-shrink: 0;
+}
+
+.info-left {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.info-name {
+	font-weight: 700;
+	font-size: 0.9375rem;
+	color: #111827;
+}
+
+.info-code {
+	font-size: 0.75rem;
+	color: #9ca3af;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.info-market {
+	font-size: 0.625rem;
+	padding: 0.0625rem 0.375rem;
+	background: #f3f4f6;
+	color: #6b7280;
+	border-radius: 0.1875rem;
+	font-weight: 500;
+	border: 1px solid #e5e7eb;
+}
+
+.info-right {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+}
+
+.info-price {
+	font-size: 1.0625rem;
+	font-weight: 700;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	color: #111827;
+}
+
+.info-price.up { color: var(--color-up); }
+.info-price.down { color: var(--color-down); }
+
+.info-change {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	color: #9ca3af;
+}
+
+.info-change.up { color: var(--color-up); }
+.info-change.down { color: var(--color-down); }
+
+.info-sep {
+	color: #d1d5db;
+	font-size: 0.75rem;
+}
+
+.info-detail {
+	font-size: 0.6875rem;
+	color: #9ca3af;
+}
+
+.info-detail strong {
+	color: #374151;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* --- 3-Column Grid --- */
+.main-grid {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	gap: 0.375rem;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+	.main-grid {
+		grid-template-columns: 2fr 6fr 2.5fr;
+	}
+}
+
+.col-left {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.col-center {
+	display: flex;
+	flex-direction: column;
+	gap: 0.375rem;
+	min-height: 0;
+}
+
+.col-right {
+	min-height: 0;
+	overflow-y: auto;
+}
+
+/* --- Action Bar --- */
+.action-bar {
+	display: flex;
+	gap: 0.25rem;
+	flex-shrink: 0;
+}
+
+.action-btn {
+	flex: 1;
+	padding: 0.3125rem;
+	border: 1px solid var(--color-border);
+	border-radius: 0.25rem;
+	background-color: #ffffff;
+	color: #6b7280;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.15s, color 0.15s;
+}
+
+.action-btn:hover {
+	background-color: #f3f4f6;
+	color: #111827;
+}
+
+.action-btn.ai {
+	color: #7c3aed;
+}
+
+.action-btn.ai:hover {
+	background-color: rgba(124, 58, 237, 0.06);
+}
+
+.action-btn.predict {
+	color: #9333ea;
+}
+
+.action-btn.predict:hover {
+	background-color: rgba(147, 51, 234, 0.06);
+}
+
+.action-btn.news {
+	color: #0284c7;
+}
+
+.action-btn.news:hover {
+	background-color: rgba(2, 132, 199, 0.06);
+}
+
+.action-btn.report {
+	color: #059669;
+}
+
+.action-btn.report:hover {
+	background-color: rgba(5, 150, 105, 0.06);
+}
