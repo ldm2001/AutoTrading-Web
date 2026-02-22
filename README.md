@@ -6,7 +6,7 @@
 
 ### 개인 투자자의 구조적 불리함
 
-한국 주식 시장에서 개인 투자자는 다음과 같은 반복적인 문제에 직면합니다.
+한국 주식 시장에서 개인 투자자는 다음과 같은 반복적인 문제에 직면
 
 - **정보 비대칭**: 기관·외국인 대비 실시간 분석 능력 부재
 - **감정적 판단**: 공포·탐욕으로 인한 손절 지연, 고점 매수
@@ -16,13 +16,13 @@
 
 ### 핵심 질문
 
-> 기술 지표 + AI 예측 + 뉴스 감성을 통합해, 개인 투자자가 감정 없이 규칙 기반으로 매매할 수 있는 시스템을 만들 수 있는가?
+> 기술 지표 + AI 예측 + 뉴스 감성을 통합해 개인 투자자가 감정 없이 규칙 기반으로 매매할 수 있는 시스템을 만들 수 있는가?
 
 ---
 
 ## 2. 솔루션 개요
 
-**AI 멀티팩터 전략 + Transformer 예측 + Gemini 분석**을 결합한 자동매매 웹 애플리케이션.
+**AI 멀티팩터 전략 + Transformer 예측 + Gemini 분석**을 결합한 자동매매 웹 애플리케이션
 
 ```
 [실시간 시세 수신] → [5팩터 스코어링] → [Transformer 5일 예측]
@@ -200,28 +200,6 @@
 
 ---
 
-## 환경 설정
-
-### .env
-
-```env
-KIS_APP_KEY=...
-KIS_APP_SECRET=...
-KIS_ACCOUNT_NO=...           # 계좌번호 (숫자만)
-KIS_ACCOUNT_PRODUCT_CODE=01  # 상품코드 (일반: 01)
-KIS_MOCK=false               # true = 모의투자
-
-GEMINI_API_KEY=...
-DISCORD_WEBHOOK_URL=...      # 선택
-
-BUY_SCORE_THRESHOLD=55       # 매수 진입 점수
-STOP_LOSS_PCT=-3.0           # 손절 기준 (%)
-TAKE_PROFIT_PCT=5.0          # 익절 기준 (%)
-TARGET_BUY_COUNT=3           # 동시 보유 종목 수
-BUY_PERCENT=0.3              # 종목당 투자 비율 (현금의 30%)
-USE_PREDICTION=true          # Transformer 예측 봇 반영 여부
-```
-
 ### 실행
 
 ```bash
@@ -233,7 +211,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 # 프론트엔드
 cd frontend
 npm install
-npm run dev        # localhost:5173
+npm run dev
 ```
 
 ---
@@ -260,9 +238,4 @@ npm run dev        # localhost:5173
 
 ---
 
-## 주의사항
 
-- 실거래 전 반드시 `KIS_MOCK=true` 모의투자로 충분히 검증하세요.
-- AI 추천/예측은 투자 참고용이며, 손실 책임은 사용자에게 있습니다.
-- Gemini API 미설정 시 AI 분석·리포트 기능은 비활성화됩니다.
-- Transformer 예측은 종목당 최초 실행 시 10~30초 소요, 이후 1시간 캐시 적용됩니다.
