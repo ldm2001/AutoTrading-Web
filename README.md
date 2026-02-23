@@ -236,6 +236,10 @@ npm run dev
 | WS | `/ws/prices` | 실시간 가격 스트림 |
 | WS | `/ws/trades` | 거래 이벤트 스트림 |
 
+## Privew
+<img width="1728" height="962" alt="주식자동매매프로그램" src="https://github.com/user-attachments/assets/e23ec122-baa8-4d69-9565-8b0bd721d65b" />
+
+
 ---
 
 
