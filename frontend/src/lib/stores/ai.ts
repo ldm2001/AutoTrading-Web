@@ -7,6 +7,7 @@ export const dailyReport = writable<string>('');
 export const aiLoading = writable<boolean>(false);
 
 export async function fetchAISignal(code: string) {
+	aiSignal.set(null);
 	aiLoading.set(true);
 	try {
 		const resp = await fetch(`/api/ai/signal/${code}`);

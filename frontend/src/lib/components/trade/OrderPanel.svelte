@@ -22,6 +22,16 @@
 	const maxQty       = $derived(price > 0 ? Math.floor(cash / price) : 0);
 	const orderTotal   = $derived(price * qty);
 
+	// 수익 계산 (매수 기준, 수수료 0.015% + 세금 0.23%)
+	const BUY_FEE  = 0.00015;
+	const SELL_FEE = 0.00245;
+	const targetPrice  = $derived(price > 0 ? Math.round(price * 1.05) : 0);
+	const stopPrice    = $derived(price > 0 ? Math.round(price * 0.97) : 0);
+	const targetProfit = $derived(price > 0 ? Math.round(targetPrice - price - price * BUY_FEE - targetPrice * SELL_FEE) : 0);
+	const stopLoss     = $derived(price > 0 ? Math.round(stopPrice  - price - price * BUY_FEE - stopPrice  * SELL_FEE) : 0);
+	const targetPct    = $derived(price > 0 ? targetProfit / price * 100 : 0);
+	const stopPct      = $derived(price > 0 ? stopLoss     / price * 100 : 0);
+
 	// 종목 변경 -> 초기화 + 호가 재조회
 	$effect(() => {
 		const code = $selectedStock;
@@ -231,6 +241,24 @@
 					{#if result}
 						<div class="of-result" class:success={result.type==='success'} class:error={result.type==='error'}>
 							{result.msg}
+						</div>
+					{/if}
+
+					<!-- 수익 계산 -->
+					{#if price > 0}
+						<div class="of-calc">
+							<div class="of-calc-title">수익를 계산 <span class="of-calc-fee-label">(수수료 포함)</span></div>
+							<div class="of-calc-row">
+								<span class="of-calc-label">목표가</span>
+								<span class="of-calc-val">{fmt(targetPrice)}</span>
+								<span class="of-calc-pnl up">+{fmt(targetProfit)}원 (+{targetPct.toFixed(2)}%)</span>
+							</div>
+							<div class="of-calc-row">
+								<span class="of-calc-label">손절가</span>
+								<span class="of-calc-val">{fmt(stopPrice)}</span>
+								<span class="of-calc-pnl down">{fmt(stopLoss)}원 ({stopPct.toFixed(2)}%)</span>
+							</div>
+							<div class="of-calc-fee-row">수수료 0.015% + 세금 0.23%</div>
 						</div>
 					{/if}
 				</div>

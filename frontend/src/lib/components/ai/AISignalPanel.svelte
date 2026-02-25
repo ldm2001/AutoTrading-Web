@@ -40,7 +40,7 @@
 	{#if $aiLoading}
 		<div class="ai-loading">
 			<div class="ai-spinner"></div>
-			<span>AI 분석 중...</span>
+			<span>AI 분석 중</span>
 		</div>
 	{:else if $aiSignal}
 		<div class="ai-signal-row">
