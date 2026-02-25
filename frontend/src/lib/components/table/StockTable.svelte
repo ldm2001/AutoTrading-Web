@@ -189,7 +189,7 @@
 			{#if $recommendLoading}
 				<div class="recommend-loading">
 					<div class="recommend-spinner"></div>
-					<span>전략 분석 중...</span>
+					<span>전략 분석 중</span>
 				</div>
 			{:else if $recommendations.length === 0}
 				<div class="watchlist-empty">추천 종목을 불러오려면<br/>새로고침을 눌러주세요</div>
@@ -201,6 +201,15 @@
 						onclick={() => openRecModal(rec)}
 					>
 						<span class="stock-name">{rec.name}</span>
+						{#if rec.prediction}
+							<span
+								class="rec-pred-badge"
+								class:pred-up={rec.prediction.change_pct > 0}
+								class:pred-down={rec.prediction.change_pct < 0}
+							>
+								{rec.prediction.change_pct > 0 ? "+" : ""}{rec.prediction.change_pct.toFixed(1)}%{rec.prediction.trend === "상승" ? "↑" : rec.prediction.trend === "하락" ? "↓" : "→"}
+							</span>
+						{/if}
 						<span class="rec-signal {rec.signal}">{signalLabel(rec.signal)}</span>
 					</button>
 				{/each}

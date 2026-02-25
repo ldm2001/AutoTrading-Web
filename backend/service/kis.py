@@ -172,16 +172,17 @@ def search(query: str) -> list[dict[str, str]]:
             break
     return results
 
-# 한국투자증권 OpenAPI 클라이언트
+# 한국투자증권 API
 class KIS:
-
     # 캐시 TTL
-    TTL_PRICE = 3 # 주가: 3초 (장 시간 3초 루프와 동기화)
-    TTL_DAILY = 300 # 일봉: 5분
-    TTL_INDEX = 5 # 지수: 5초
+    TTL_PRICE   = 3   # 주가: 3초 (장 시간 3초 루프와 동기화)
+    TTL_OB      = 3   # 호가: 3초 (실시간 호가창)
+    TTL_DAILY   = 300 # 일봉: 5분
+    TTL_15M     = 60  # 15분봉: 1분 (SMC 계산용)
+    TTL_INDEX   = 5   # 지수: 5초
     TTL_HOLDINGS = 10 # 잔고: 10초
-    TTL_CASH = 10 # 예수금: 10초
-    TTL_TARGET = 30 # 목표가: 30초
+    TTL_CASH    = 10  # 예수금: 10초
+    TTL_TARGET  = 30  # 목표가: 30초
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
@@ -279,6 +280,38 @@ class KIS:
     async def price_raw(self, code: str) -> int:
         return (await self.price(code))["price"]
 
+    # 호가창 조회 — 매도/매수 5호가 (3초 캐시)
+    async def orderbook(self, code: str) -> dict:
+        key = f"ob:{code}"
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+        await self._ensure()
+        resp = await self._client.get(
+            "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+            headers=self._headers("FHKST01010200"),
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        )
+        resp.raise_for_status()
+        o = resp.json().get("output1", {})
+        # 매도호가: askp1(최저)~askp5(최고) → 화면 위부터 아래로 역순 배치
+        asks = []
+        for i in range(5, 0, -1):
+            p = int(o.get(f"askp{i}", 0) or 0)
+            v = int(o.get(f"askp_rsqn{i}", 0) or 0)
+            if p:
+                asks.append({"price": p, "volume": v})
+        # 매수호가: bidp1(최고)~bidp5(최저)
+        bids = []
+        for i in range(1, 6):
+            p = int(o.get(f"bidp{i}", 0) or 0)
+            v = int(o.get(f"bidp_rsqn{i}", 0) or 0)
+            if p:
+                bids.append({"price": p, "volume": v})
+        result = {"asks": asks, "bids": bids}
+        self.cache.set(key, result, self.TTL_OB)
+        return result
+
     # 일봉 캔들 조회 — 최대 count개 (5분 캐시)
     async def daily(self, code: str, count: int = 60) -> list[dict]:
         key = f"daily:{code}:{count}"
@@ -310,6 +343,62 @@ class KIS:
             })
         candles.reverse()
         self.cache.set(key, candles, self.TTL_DAILY)
+        return candles
+
+    # 15분봉 캔들 조회 — SMC FVG/OB 계산용 (당일 장중 한정, 1분봉 집계)
+    async def candles_15m(self, code: str) -> list[dict]:
+        key = f"candles_15m:{code}"
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+        await self._ensure()
+        # KIS TR FHKST03010200: 분봉 조회 (1분 단위, 최대 30건)
+        # FID_INPUT_HOUR_1 = "153000" - 당일 15:30 기준 이전 데이터 반환
+        resp = await self._client.get(
+            "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+            headers=self._headers("FHKST03010200"),
+            params={
+                "FID_ETC_CLS_CODE":       "",
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD":         code,
+                "FID_INPUT_HOUR_1":       "153000",
+                "FID_PW_DATA_INCU_YN":    "Y",
+            },
+        )
+        resp.raise_for_status()
+        raw = resp.json().get("output2", [])
+
+        # 1분봉 -> 15분봉 집계
+        import datetime
+        buckets: dict[str, dict] = {}
+        for item in raw:
+            dt_str = item.get("stck_bsop_date", "") + item.get("stck_cntg_hour", "")
+            if len(dt_str) < 12:
+                continue
+            try:
+                dt = datetime.datetime.strptime(dt_str, "%Y%m%d%H%M%S")
+            except ValueError:
+                continue
+            # 15분 버킷: 분을 15 단위로 내림
+            bucket_min = (dt.minute // 15) * 15
+            bucket_dt  = dt.replace(minute=bucket_min, second=0, microsecond=0)
+            bk = bucket_dt.strftime("%Y%m%d%H%M")
+            o  = int(item.get("stck_oprc", 0))
+            h  = int(item.get("stck_hgpr", 0))
+            l  = int(item.get("stck_lwpr", 0))
+            c  = int(item.get("stck_prpr", 0))
+            v  = int(item.get("cntg_vol",  0))
+            if bk not in buckets:
+                buckets[bk] = {"time": bucket_dt, "open": o, "high": h, "low": l, "close": c, "volume": v}
+            else:
+                b = buckets[bk]
+                b["high"]   = max(b["high"], h)
+                b["low"]    = min(b["low"],  l)
+                b["close"]  = c
+                b["volume"] += v
+
+        candles = sorted(buckets.values(), key=lambda x: x["time"])
+        self.cache.set(key, candles, self.TTL_15M)
         return candles
 
     # 관심 종목 전체 현재가 병렬 조회
@@ -364,15 +453,19 @@ class KIS:
         self.cache.set(key, result, self.TTL_INDEX)
         return result
 
-    # KOSPI/KOSDAQ/코스피200 전체 지수 조회
+    # KOSPI/KOSDAQ/코스피200 전체 지수 조회 — 실패 시 마지막 성공값 fallback
     async def indices(self) -> list[dict]:
         result = []
         for key, (api_code, name) in INDICES.items():
             try:
                 data = await self.index(api_code)
+                self.cache.set(f"idx_last:{key}", {"code": key, "name": name, **data}, 3600)
                 result.append({"code": key, "name": name, **data})
             except Exception as e:
                 logger.error(f"Index error ({key}): {e}")
+                last = self.cache.get(f"idx_last:{key}")
+                if last:
+                    result.append(last)
         return result
 
     # 잔고

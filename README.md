@@ -55,10 +55,12 @@
 
 ```
 1단계 — 빠른 스크리닝 (전 종목, ~10초)
-  RSI        최대 ±25점  과매도/과매수 판단
-  MACD       최대 ±25점  골든크로스/데드크로스
-  Bollinger  최대 ±20점  밴드 이탈/근접
+  RSI        최대 ±20점  과매도/과매수 판단
+  MACD       최대 ±20점  골든크로스/데드크로스
+  Bollinger  최대 ±15점  밴드 이탈/근접
   변동성 돌파  최대 ±15점  당일 목표가 돌파 여부
+  FVG        최대 ±8점   Fair Value Gap 근접도 (SMC)
+  Order Block 최대 ±7점  기관 주문 집중 좌표 (SMC)
   → 상위 20개 후보 선정
 
 2단계 — Transformer 예측 보정 (상위 20개, ~30초)
@@ -88,7 +90,10 @@
 
 ### 3-6. 수동 주문 패널
 
-- 목표가·손절가·투자금 기반 수익률 계산기 내장
+- **실시간 호가창**: KIS API 매도/매수 10단계 호가 + 거래량 바 시각화 (3초 갱신)
+- 호가 클릭 시 주문 가격 자동 입력
+- 잔고 기반 10% / 25% / 50% / 100% 빠른 수량 입력
+- 체결 내역 / 미체결 내역 탭 구분 표시
 - KIS OpenAPI 연동 시장가 매수/매도 즉시 실행
 
 ---
@@ -112,7 +117,8 @@
 | **백엔드** | Python 3.11 / FastAPI / asyncio / httpx |
 | **AI 예측** | PyTorch — Transformer 인코더 + PositionalEncoding |
 | **AI 분석** | Google Gemini API — 자연어 분석·리포트 |
-| **기술지표** | 자체 구현 RSI / MACD / 볼린저밴드 (NumPy 없음) |
+| **기술지표** | RSI / MACD / 볼린저밴드 — NumPy 벡터 연산 |
+| **SMC** | Fair Value Gap / Order Block / BOS·CHoCH — 오버나잇 갭 필터 내장 |
 | **프론트엔드** | SvelteKit + TypeScript / lightweight-charts v5 |
 | **실시간** | WebSocket (FastAPI) ↔ Svelte 스토어 |
 | **브로커** | 한국투자증권 KIS OpenAPI (실거래 / 모의투자) |
@@ -223,7 +229,8 @@ npm run dev
 | GET | `/api/stocks` | 전체 종목 목록 |
 | GET | `/api/stocks/{code}/price` | 실시간 현재가 |
 | GET | `/api/stocks/{code}/daily` | 일봉 캔들 (최대 60일) |
-| GET | `/api/stocks/recommend` | AI 추천 Top 10 |
+| GET | `/api/stocks/recommend` | AI 추천 Top 10 (예측 배지 포함) |
+| GET | `/api/stocks/{code}/orderbook` | 실시간 10단계 호가창 |
 | GET | `/api/predict/{code}` | Transformer 5일 예측 |
 | GET | `/api/ai/signal/{code}` | AI 기술지표 + 뉴스 종합 분석 |
 | GET | `/api/ai/news/{code}` | 뉴스 감성 분석 |
@@ -235,6 +242,18 @@ npm run dev
 | GET | `/api/trading/portfolio` | 보유 종목 + 평가금액 |
 | WS | `/ws/prices` | 실시간 가격 스트림 |
 | WS | `/ws/trades` | 거래 이벤트 스트림 |
+
+## 변경 이력
+
+### 2026-02-25
+- **주문 패널 전면 재설계**: 호가창(매도·매수 10단계) + 주문 폼 + 체결내역 탭으로 레이아웃 개편
+- **KIS 호가 API 연동**: `GET /api/stocks/{code}/orderbook` — TR `FHKST01010200`, 3초 TTL 캐시
+- **SMC 지표 추가**: FVG(±8점) · Order Block(±7점) 팩터를 멀티팩터 스코어에 통합 (7팩터 100점)
+- **AI 추천 2단계 고도화**: 상위 20개 후보에 Transformer 예측 적용 후 재평가 → Top 10 반환, 목록에 예측 변동률 배지(+3.8%↑) 표시
+- **NumPy 도입**: `indicators.py` RSI(Wilder 스무딩) · MACD · 볼린저밴드 전부 벡터 연산으로 전환
+- **WebSocket 메모리 누수 수정**: 핸들러 Map→Set 변경, `on()` cleanup 함수 반환, ping 타이머 `close()` 시 정리
+
+---
 
 ## Preview
 <img width="1728" height="962" alt="주식자동매매프로그램" src="https://github.com/user-attachments/assets/e23ec122-baa8-4d69-9565-8b0bd721d65b" />

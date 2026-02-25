@@ -40,20 +40,27 @@
 		priceWs.connect();
 		tradeWs.connect();
 
-		priceWs.on('price_update', (msg: unknown) => {
+		const offPrice = priceWs.on('price_update', (msg: unknown) => {
 			const data = msg as PriceUpdate;
 			if (data.stocks) updateStockPrices(data.stocks);
-			if (data.indices) indices.set(data.indices);
+			// 부분 실패 시 기존 값 유지 — merge로 깜빡임 방지
+			if (data.indices?.length) {
+				indices.update(cur => {
+					const map = new Map(cur.map(i => [i.code, i]));
+					for (const idx of data.indices) map.set(idx.code, idx);
+					return [...map.values()];
+				});
+			}
 		});
 
-		tradeWs.on('message', (msg: unknown) => {
+		const offMsg = tradeWs.on('message', (msg: unknown) => {
 			const data = msg as TradeMessage;
 			if (typeof data.data === 'string') {
 				addConsoleMessage(data.data);
 			}
 		});
 
-		tradeWs.on('trade', (_msg: unknown) => {
+		const offTrade = tradeWs.on('trade', (_msg: unknown) => {
 			fetchTradingStatus();
 		});
 
@@ -64,6 +71,7 @@
 		}, 5000);
 
 		return () => {
+			offPrice(); offMsg(); offTrade();
 			priceWs.close();
 			tradeWs.close();
 			clearInterval(priceTimer);

@@ -311,6 +311,20 @@
 	line-height: 1.5;
 }
 
+/* AI 추천 리스트 예측 배지 */
+.rec-pred-badge {
+	font-size: 0.5625rem;
+	font-weight: 700;
+	padding: 0.0625rem 0.25rem;
+	border-radius: 0.125rem;
+	flex-shrink: 0;
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	background: #f3f4f6;
+	color: #9ca3af;
+}
+.rec-pred-badge.pred-up  { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
+.rec-pred-badge.pred-down { background: rgba(59, 130, 246, 0.08); color: #3b82f6; }
+
 /* AI Recommend */
 .rec-wrap {
 	border-bottom: 1px solid #f3f4f6;

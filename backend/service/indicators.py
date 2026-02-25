@@ -1,49 +1,38 @@
-# 기술 지표 모듈 (RSI, MACD, 볼린저밴드)
-import math
+# 기술 지표 모듈 (RSI, MACD, 볼린저밴드) — numpy 벡터 연산
+import numpy as np
 
 
 class Indicators:
 
-    # 종가 배열 추출
-    def _closes(self, candles: list[dict]) -> list[float]:
-        return [float(c["close"]) for c in candles]
+    # 종가 배열 → numpy float64
+    def _arr(self, candles: list[dict]) -> np.ndarray:
+        return np.array([c["close"] for c in candles], dtype=np.float64)
 
-    # EMA (지수이동평균) 계산
-    def _ema(self, values: list[float], period: int) -> list[float]:
-        if not values:
-            return []
-        k = 2 / (period + 1)
-        result = [values[0]]
-        for v in values[1:]:
-            result.append(v * k + result[-1] * (1 - k))
-        return result
+    # EMA — 초기값 첫 원소, 이후 지수평활
+    def _ema(self, arr: np.ndarray, period: int) -> np.ndarray:
+        k = 2.0 / (period + 1)
+        out = np.empty(len(arr))
+        out[0] = arr[0]
+        for i in range(1, len(arr)):
+            out[i] = arr[i] * k + out[i - 1] * (1 - k)
+        return out
 
-    # RSI 계산 (기본 14일)
+    # RSI 계산 (기본 14일) — Wilder smoothing
     def rsi(self, candles: list[dict], period: int = 14) -> float | None:
-        closes = self._closes(candles)
+        closes = self._arr(candles)
         if len(closes) < period + 1:
             return None
-        gains, losses = 0.0, 0.0
-        for i in range(1, period + 1):
-            diff = closes[i] - closes[i - 1]
-            if diff > 0:
-                gains += diff
-            else:
-                losses -= diff
-        avg_gain = gains / period
-        avg_loss = losses / period
-        for i in range(period + 1, len(closes)):
-            diff = closes[i] - closes[i - 1]
-            if diff > 0:
-                avg_gain = (avg_gain * (period - 1) + diff) / period
-                avg_loss = (avg_loss * (period - 1)) / period
-            else:
-                avg_gain = (avg_gain * (period - 1)) / period
-                avg_loss = (avg_loss * (period - 1) - diff) / period
-        if avg_loss == 0:
+        delta  = np.diff(closes)
+        gains  = np.where(delta > 0, delta, 0.0)
+        losses = np.where(delta < 0, -delta, 0.0)
+        avg_g  = gains[:period].mean()
+        avg_l  = losses[:period].mean()
+        for i in range(period, len(delta)):
+            avg_g = (avg_g * (period - 1) + gains[i])  / period
+            avg_l = (avg_l * (period - 1) + losses[i]) / period
+        if avg_l == 0:
             return 100.0
-        rs = avg_gain / avg_loss
-        return round(100 - 100 / (1 + rs), 2)
+        return round(100 - 100 / (1 + avg_g / avg_l), 2)
 
     # MACD 계산 (기본 12/26/9)
     def macd(
@@ -53,15 +42,14 @@ class Indicators:
         slow: int = 26,
         signal_period: int = 9,
     ) -> dict | None:
-        closes = self._closes(candles)
+        closes = self._arr(candles)
         if len(closes) < slow + signal_period:
             return None
-        ema_fast    = self._ema(closes, fast)
-        ema_slow    = self._ema(closes, slow)
-        macd_line   = [f - s for f, s in zip(ema_fast, ema_slow)]
-        signal_line = self._ema(macd_line[slow - 1:], signal_period)
-        m = macd_line[-1]
-        s = signal_line[-1] if signal_line else 0
+        ema_f = self._ema(closes, fast)
+        ema_s = self._ema(closes, slow)
+        line  = ema_f - ema_s
+        sig   = self._ema(line[slow - 1:], signal_period)
+        m, s  = float(line[-1]), float(sig[-1])
         return {
             "macd":      round(m, 2),
             "signal":    round(s, 2),
@@ -75,18 +63,17 @@ class Indicators:
         period: int = 20,
         std_dev: float = 2.0,
     ) -> dict | None:
-        closes = self._closes(candles)
+        closes = self._arr(candles)
         if len(closes) < period:
             return None
-        window   = closes[-period:]
-        middle   = sum(window) / period
-        variance = sum((x - middle) ** 2 for x in window) / period
-        sd       = math.sqrt(variance)
+        window = closes[-period:]
+        mid    = float(window.mean())
+        sd     = float(window.std(ddof=0))
         return {
-            "upper":         round(middle + std_dev * sd, 2),
-            "middle":        round(middle, 2),
-            "lower":         round(middle - std_dev * sd, 2),
-            "current_price": closes[-1],
+            "upper":         round(mid + std_dev * sd, 2),
+            "middle":        round(mid, 2),
+            "lower":         round(mid - std_dev * sd, 2),
+            "current_price": float(closes[-1]),
         }
 
     # 전체 기술 지표 요약
@@ -100,9 +87,9 @@ class Indicators:
         }
 
 
-# 모듈 레벨 인스턴스 (기존 코드와 호환)
-_ind     = Indicators()
-rsi      = _ind.rsi
-macd     = _ind.macd
+# 모듈 레벨 인스턴스
+_ind      = Indicators()
+rsi       = _ind.rsi
+macd      = _ind.macd
 bollinger = _ind.bollinger
-summary  = _ind.summary
+summary   = _ind.summary

@@ -141,6 +141,14 @@ async def recommend():
     return top10
 
 
+@router.get("/{code}/orderbook")
+async def orderbook(code: str):
+    try:
+        return await kis.orderbook(code)
+    except Exception as e:
+        raise HTTPException(502, f"KIS API error: {e}")
+
+
 @router.get("/{code}/price")
 async def price(code: str):
     try:

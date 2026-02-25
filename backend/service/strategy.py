@@ -5,15 +5,18 @@ import time
 
 from service.kis import kis
 from service import indicators
+from service import smc
 
 logger = logging.getLogger(__name__)
 
 # 팩터별 최대 점수 (합계 100점)
-W_RSI     = 25
-W_MACD    = 25
-W_BB      = 20
-W_VOL     = 15
-W_PREDICT = 15
+W_RSI     = 20 # 25 -> 20: 방향성 참고용 유지
+W_MACD    = 20 # 25 -> 20: 모멘텀 확인용 유지
+W_BB      = 15 # 20 -> 15: 밴드 위치 참고
+W_VOL     = 15 # 유지: 변동성 돌파 (국장 핵심 전략)
+W_PREDICT = 15 # 유지: Transformer 예측
+W_FVG     = 8  # 신규: Fair Value Gap 근접도 (유동성 공백 회귀 확률)
+W_OB      = 7  # 신규: Order Block 지지/저항 (기관 주문 집중 좌표)
 
 # 매수/매도 진입 임계값
 BUY_THRESHOLD  = 55
@@ -22,7 +25,6 @@ SELL_THRESHOLD = -40
 # 평가 캐시 (prediction=None 일 때만 저장, 2분 TTL)
 _cache: dict[str, tuple[float, dict]] = {}
 _TTL   = 120
-
 
 class Scorer:
 
@@ -51,11 +53,11 @@ class Scorer:
         hist       = data["histogram"]
         macd_val   = data["macd"]
         signal_val = data["signal"]
-        # 골든크로스 → 매수
+        # 골든크로스 -> 매수
         if hist > 0 and macd_val > signal_val:
             strength = min(abs(hist) / max(abs(signal_val), 1) * 10, 1.0)
             return W_MACD * strength, f"MACD 골든크로스 (hist={hist:+.1f})"
-        # 데드크로스 → 매도
+        # 데드크로스 -> 매도
         if hist < 0 and macd_val < signal_val:
             strength = min(abs(hist) / max(abs(signal_val), 1) * 10, 1.0)
             return -W_MACD * strength, f"MACD 데드크로스 (hist={hist:+.1f})"
@@ -71,13 +73,13 @@ class Scorer:
         band_width = upper - lower
         if band_width == 0:
             return 0, "밴드 폭 0"
-        # 하단 이탈 → 매수 (반등 기대)
+        # 하단 이탈 -> 매수 (반등 기대)
         if price <= lower:
             return W_BB, f"볼린저 하단 이탈 ({price:,.0f} ≤ {lower:,.0f})"
         # 하단 근접
         if price < lower + band_width * 0.2:
             return W_BB * 0.6, "볼린저 하단 근접"
-        # 상단 이탈 → 매도 (과열)
+        # 상단 이탈 -> 매도 (과열)
         if price >= upper:
             return -W_BB, f"볼린저 상단 이탈 ({price:,.0f} ≥ {upper:,.0f})"
         # 상단 근접
@@ -101,6 +103,22 @@ class Scorer:
         if gap_pct < 0.5:
             return W_VOL * 0.3, f"변동성 돌파 근접 (목표 {target:,.0f}, 현재 {price:,})"
         return 0, f"변동성 미돌파 (목표 {target:,.0f})"
+
+    # FVG 근접도 점수화 (-8 ~ +8) — 일봉 기반 (분봉 사용 시 정밀도 향상)
+    def _fvg(self, candles: list[dict], price: int) -> tuple[float, str]:
+        try:
+            s, r = smc.fvg_score(candles, float(price))
+            return round(s * (W_FVG / 8), 1), r
+        except Exception:
+            return 0.0, "FVG 계산 오류"
+
+    # OB 지지/저항 점수화 (-7 ~ +7) — 기관 주문 집중 좌표
+    def _ob(self, candles: list[dict], price: int) -> tuple[float, str]:
+        try:
+            s, r = smc.ob_score(candles, float(price))
+            return round(s * (W_OB / 7), 1), r
+        except Exception:
+            return 0.0, "OB 계산 오류"
 
     # Transformer 예측 점수화 (-15 ~ +15)
     def _pred(self, prediction: dict | None, price: int) -> tuple[float, str]:
@@ -127,7 +145,7 @@ class Scorer:
             return -W_PREDICT * 0.6, f"AI 예측 {change_pct:.1f}% (소폭 하락)"
         return 0, f"AI 예측 {change_pct:+.1f}% (중립)"
 
-    # 종목 종합 평가 (멀티팩터 스코어링)
+    # 종목 종합 평가 (멀티팩터 스코어링 — SMC 통합)
     async def evaluate(self, code: str, prediction: dict | None = None) -> dict:
         # prediction 없을 때만 캐시 활용
         if prediction is None:
@@ -135,21 +153,27 @@ class Scorer:
             if cached and time.time() < cached[0]:
                 return cached[1]
         try:
-            # daily + price 병렬 요청
-            candles, price_info = await asyncio.gather(
+            # daily + price + 15분봉 병렬 요청
+            candles, price_info, candles_15m = await asyncio.gather(
                 kis.daily(code),
                 kis.price(code),
+                kis.candles_15m(code),
             )
             current_price = price_info["price"]
             ind = indicators.summary(candles)
+
+            # SMC: 15분봉 있으면 사용, 없으면 일봉 폴백
+            smc_candles = candles_15m if candles_15m else candles
 
             rsi_s,  rsi_r  = self._rsi(ind["rsi"])
             macd_s, macd_r = self._macd(ind["macd"])
             bb_s,   bb_r   = self._bb(ind["bollinger"])
             vol_s,  vol_r  = self._vol(candles, current_price)
             pred_s, pred_r = self._pred(prediction, current_price)
+            fvg_s,  fvg_r  = self._fvg(smc_candles, current_price)
+            ob_s,   ob_r   = self._ob(smc_candles, current_price)
 
-            total = rsi_s + macd_s + bb_s + vol_s + pred_s
+            total = rsi_s + macd_s + bb_s + vol_s + pred_s + fvg_s + ob_s
 
             factors = [
                 {"name": "RSI",        "score": round(rsi_s,  1), "max": W_RSI,     "reason": rsi_r},
@@ -157,6 +181,8 @@ class Scorer:
                 {"name": "Bollinger",  "score": round(bb_s,   1), "max": W_BB,      "reason": bb_r},
                 {"name": "Volatility", "score": round(vol_s,  1), "max": W_VOL,     "reason": vol_r},
                 {"name": "AI Predict", "score": round(pred_s, 1), "max": W_PREDICT, "reason": pred_r},
+                {"name": "FVG",        "score": round(fvg_s,  1), "max": W_FVG,     "reason": fvg_r},
+                {"name": "OrderBlock", "score": round(ob_s,   1), "max": W_OB,      "reason": ob_r},
             ]
 
             if total >= BUY_THRESHOLD:

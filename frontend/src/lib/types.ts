@@ -127,6 +127,16 @@ export interface RecommendStock {
 	prediction?: RecommendPrediction | null;
 }
 
+export interface OrderLevel {
+	price: number;
+	volume: number;
+}
+
+export interface OrderBook {
+	asks: OrderLevel[];
+	bids: OrderLevel[];
+}
+
 export interface PredictionCandle {
 	date: string;
 	open: number;

@@ -1,289 +1,363 @@
-.order-panel {
-	border: 1px solid var(--color-border);
-	border-radius: 0.375rem;
-	background-color: #ffffff;
-	padding: 0;
-	height: 100%;
+/* ── 전체 래퍼 ── */
+.op-wrap {
 	display: flex;
 	flex-direction: column;
+	height: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: 0.375rem;
+	background: #fff;
+	overflow: hidden;
+	font-size: 0.6875rem;
 }
 
-.order-header {
-	padding: 0.5rem 0.625rem;
+/* ── 헤더 ── */
+.op-head {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.625rem;
 	border-bottom: 1px solid var(--color-border);
+	flex-shrink: 0;
 }
-
-.order-title {
+.op-title {
 	font-size: 0.75rem;
-	font-weight: 600;
-	color: #6b7280;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-.order-stock-info {
-	padding: 0.5rem 0.625rem;
-	border-bottom: 1px solid var(--color-border);
-}
-
-.order-stock-name {
-	display: block;
-	font-size: 0.875rem;
 	font-weight: 700;
+	color: #374151;
+}
+.op-stock {
+	font-weight: 600;
 	color: #111827;
 }
-
-.order-stock-code {
-	font-size: 0.6875rem;
+.op-code {
 	color: #9ca3af;
+	margin-left: auto;
 }
 
-/* Tabs */
-.order-tabs {
+/* ── 바디 (호가 | 폼) ── */
+.op-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* ── 호가창 열 ── */
+.ob-col {
+	width: 48%;
+	border-right: 1px solid var(--color-border);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.ob-header {
+	display: flex;
+	justify-content: space-between;
+	padding: 0.25rem 0.5rem;
+	font-size: 0.5625rem;
+	color: #9ca3af;
+	border-bottom: 1px solid #f3f4f6;
+	flex-shrink: 0;
+}
+
+/* 호가 행 */
+.ob-row {
+	position: relative;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.2rem 0.5rem;
+	border: none;
+	background: none;
+	cursor: pointer;
+	min-height: 1.5rem;
+	overflow: hidden;
+}
+.ob-row:hover { background: rgba(0,0,0,0.03); }
+.ob-row.skeleton {
+	min-height: 1.5rem;
+	background: #f9fafb;
+	border-bottom: 1px solid #f3f4f6;
+	cursor: default;
+}
+
+/* 거래량 바 (배경) */
+.ob-bar {
+	position: absolute;
+	top: 0; bottom: 0;
+	right: 0;
+	opacity: 0.12;
+	pointer-events: none;
+}
+.ob-bar.ask { background: var(--color-down); }
+.ob-bar.bid { background: var(--color-up); }
+
+/* 가격 & 거래량 텍스트 */
+.ob-price {
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	position: relative;
+	z-index: 1;
+}
+.ob-price.ask { color: var(--color-down); }
+.ob-price.bid { color: var(--color-up); }
+
+.ob-vol {
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.5625rem;
+	color: #6b7280;
+	position: relative;
+	z-index: 1;
+}
+
+/* 현재가 구분선 */
+.ob-cur {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.25rem 0.5rem;
+	background: #f9fafb;
+	border-top: 1px solid var(--color-border);
+	border-bottom: 1px solid var(--color-border);
+	flex-shrink: 0;
+}
+.ob-cur-price {
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.75rem;
+	font-weight: 700;
+	color: #374151;
+}
+.ob-cur-price.up  { color: var(--color-up); }
+.ob-cur-price.down { color: var(--color-down); }
+.ob-cur-chg {
+	font-size: 0.5625rem;
+	font-weight: 600;
+}
+.ob-cur-chg.up   { color: var(--color-up); }
+.ob-cur-chg.down { color: var(--color-down); }
+
+/* ── 주문 폼 열 ── */
+.of-col {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+/* 탭 */
+.of-tabs {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
+	flex-shrink: 0;
 }
-
-.order-tab {
-	padding: 0.4375rem;
+.of-tab {
+	padding: 0.375rem;
 	border: none;
 	background: #f3f4f6;
 	color: #9ca3af;
-	font-size: 0.8125rem;
+	font-size: 0.75rem;
 	font-weight: 600;
 	cursor: pointer;
-	transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+	transition: background-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
+.of-tab.active.buy  { background: rgba(239,68,68,0.08); color: var(--color-up);   box-shadow: inset 0 -2px 0 var(--color-up); }
+.of-tab.active.sell { background: rgba(59,130,246,0.08); color: var(--color-down); box-shadow: inset 0 -2px 0 var(--color-down); }
+.of-tab:hover:not(.active) { background: #e5e7eb; color: #374151; }
 
-.order-tab.active.buy {
-	background: rgba(239, 68, 68, 0.08);
-	color: var(--color-up);
-	box-shadow: inset 0 -2px 0 var(--color-up);
-}
-
-.order-tab.active.sell {
-	background: rgba(59, 130, 246, 0.08);
-	color: var(--color-down);
-	box-shadow: inset 0 -2px 0 var(--color-down);
-}
-
-.order-tab:hover:not(.active) {
-	background: #e5e7eb;
-	color: #374151;
-}
-
-/* Rows */
-.order-row {
+/* 폼 행 */
+.of-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0.375rem 0.625rem;
-	border-bottom: 1px solid #f3f4f6;
+	padding: 0.3rem 0.5rem;
+	gap: 0.25rem;
 }
+.of-label { color: #9ca3af; flex-shrink: 0; }
+.of-max   { color: #9ca3af; font-size: 0.5625rem; }
 
-.order-label {
-	font-size: 0.6875rem;
-	color: #9ca3af;
-}
-
-.order-price {
-	font-size: 0.9375rem;
-	font-weight: 700;
-	color: #111827;
-	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-}
-
-.order-price.up { color: var(--color-up); }
-.order-price.down { color: var(--color-down); }
-
-.order-value {
-	font-size: 0.8125rem;
-	font-weight: 600;
-	color: #374151;
-	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-}
-
-/* Qty Group */
-.order-qty-group {
+/* 입력 */
+.of-input-wrap {
 	display: flex;
 	align-items: center;
 	border: 1px solid var(--color-border);
 	border-radius: 0.25rem;
 	overflow: hidden;
+	background: #fff;
 }
+.of-input-wrap.qty { width: 100%; margin: 0 0.5rem; }
 
-.order-qty-btn {
-	width: 1.75rem;
-	height: 1.75rem;
-	background: #f3f4f6;
+.of-input {
+	flex: 1;
+	min-width: 0;
+	padding: 0.25rem 0.375rem;
 	border: none;
-	color: #374151;
-	font-size: 0.875rem;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.order-qty-btn {
-	transition: background-color 0.1s;
-}
-.order-qty-btn:hover:not(:disabled) {
-	background: #e5e7eb;
-}
-
-.order-qty-btn:disabled {
-	opacity: 0.5;
-}
-
-.order-qty-input {
-	width: 3rem;
-	height: 1.75rem;
-	text-align: center;
-	background: #ffffff;
-	border: none;
-	border-left: 1px solid var(--color-border);
-	border-right: 1px solid var(--color-border);
-	color: #111827;
-	font-size: 0.8125rem;
-	font-weight: 600;
+	background: transparent;
 	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #111827;
+	text-align: right;
+	outline: none;
+	appearance: textfield;
 	-moz-appearance: textfield;
 }
+.of-input::-webkit-inner-spin-button,
+.of-input::-webkit-outer-spin-button { -webkit-appearance: none; }
 
-.order-qty-input::-webkit-inner-spin-button,
-.order-qty-input::-webkit-outer-spin-button {
-	-webkit-appearance: none;
+.of-unit {
+	padding: 0 0.25rem;
+	color: #9ca3af;
+	border-left: 1px solid var(--color-border);
+	white-space: nowrap;
+}
+.of-arrows {
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid var(--color-border);
+}
+.of-arrows button {
+	width: 1.25rem;
+	height: 0.875rem;
+	padding: 0;
+	border: none;
+	background: #f9fafb;
+	color: #6b7280;
+	font-size: 0.5rem;
+	cursor: pointer;
+	line-height: 1;
+}
+.of-arrows button:hover { background: #e5e7eb; }
+
+.of-hint {
+	font-size: 0.5625rem;
+	color: var(--color-up);
+	padding: 0 0.5rem 0.25rem;
 	margin: 0;
 }
 
-/* Submit */
-.order-submit {
-	margin: 0.5rem 0.625rem;
+/* % 버튼 */
+.of-pct-row {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 0.25rem;
+	padding: 0.25rem 0.5rem;
+}
+.of-pct {
+	padding: 0.25rem 0;
+	border: 1px solid var(--color-border);
+	border-radius: 0.25rem;
+	background: #f9fafb;
+	color: #6b7280;
+	font-size: 0.625rem;
+	cursor: pointer;
+	transition: background-color 0.1s;
+}
+.of-pct:hover { background: #e5e7eb; color: #374151; }
+
+/* 총액 */
+.of-summary {
+	padding: 0.25rem 0.5rem 0;
+	text-align: right;
+	color: #9ca3af;
+}
+.of-summary-label { font-size: 0.5625rem; }
+
+.of-total-row {
+	display: flex;
+	justify-content: space-between;
+	padding: 0.25rem 0.5rem;
+}
+.of-total {
+	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	font-weight: 700;
+	color: #111827;
+}
+
+/* 주문 버튼 */
+.of-submit {
+	margin: 0.375rem 0.5rem;
 	padding: 0.5rem;
 	border: none;
 	border-radius: 0.375rem;
 	font-size: 0.875rem;
 	font-weight: 700;
 	cursor: pointer;
-	transition: opacity 0.15s;
+	transition: opacity 0.12s;
 }
+.of-submit.buy  { background: var(--color-up);   color: #fff; }
+.of-submit.sell { background: var(--color-down);  color: #fff; }
+.of-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+.of-submit:hover:not(:disabled) { opacity: 0.85; }
 
-.order-submit:hover:not(:disabled) {
-	opacity: 0.85;
-}
-
-.order-submit:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
-.order-submit.buy {
-	background: var(--color-up);
-	color: white;
-}
-
-.order-submit.sell {
-	background: var(--color-down);
-	color: white;
-}
-
-/* Result */
-.order-result {
-	margin: 0 0.625rem 0.5rem;
-	padding: 0.375rem;
+/* 결과 */
+.of-result {
+	margin: 0 0.5rem 0.25rem;
+	padding: 0.3rem 0.5rem;
 	border-radius: 0.25rem;
-	font-size: 0.6875rem;
+	font-size: 0.625rem;
 	text-align: center;
 }
+.of-result.success { background: rgba(34,197,94,0.08); color: #16a34a; }
+.of-result.error   { background: rgba(239,68,68,0.08);  color: #ef4444; }
 
-.order-result.success {
-	background: rgba(34, 197, 94, 0.08);
-	color: #16a34a;
-}
-
-.order-result.error {
-	background: rgba(239, 68, 68, 0.08);
-	color: #ef4444;
-}
-
-/* Calculator Section */
-.calc-section {
-	border-top: 1px solid var(--color-border);
-	padding: 0.5rem 0.625rem;
-	margin-top: 0.75rem;
-}
-
-.calc-title {
-	font-size: 0.6875rem;
-	font-weight: 600;
-	color: #6b7280;
-	margin-bottom: 0.375rem;
-}
-
-.calc-row {
+/* ── 체결/미체결 탭 ── */
+.hist-tabs {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.5rem;
-	margin-bottom: 0.25rem;
-}
-
-.calc-label {
-	font-size: 0.6875rem;
-	color: #9ca3af;
+	border-top: 1px solid var(--color-border);
 	flex-shrink: 0;
 }
-
-.calc-input {
-	width: 6rem;
+.hist-tab {
+	flex: 1;
+	padding: 0.375rem;
+	border: none;
 	background: #f9fafb;
-	border: 1px solid var(--color-border);
-	border-radius: 0.25rem;
-	padding: 0.1875rem 0.375rem;
-	color: #111827;
-	font-size: 0.6875rem;
-	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-	text-align: right;
-	outline: none;
-	-moz-appearance: textfield;
-}
-
-.calc-input::-webkit-inner-spin-button,
-.calc-input::-webkit-outer-spin-button {
-	-webkit-appearance: none;
-}
-
-.calc-input:focus {
-	border-color: #9ca3af;
-}
-
-.calc-result {
+	color: #9ca3af;
 	font-size: 0.6875rem;
 	font-weight: 600;
-	text-align: right;
-	margin-bottom: 0.875rem;
-	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	transition: color 0.12s, border-color 0.12s;
 }
+.hist-tab.active { color: #374151; border-bottom-color: #374151; background: #fff; }
+.hist-tab:hover:not(.active) { color: #6b7280; }
 
-.calc-result.positive {
-	color: var(--color-up);
+.hist-body {
+	max-height: 7rem;
+	overflow-y: auto;
+	flex-shrink: 0;
 }
+.hist-body::-webkit-scrollbar { width: 3px; }
+.hist-body::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
 
-.calc-result.negative {
-	color: var(--color-down);
-}
-
-.calc-note {
-	font-size: 0.5625rem;
-	color: #9ca3af;
+.hist-empty {
+	padding: 1rem;
 	text-align: center;
-	margin-top: 0.25rem;
+	color: #9ca3af;
 }
 
-.order-empty {
+.hist-row {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.25rem 0.5rem;
+	border-bottom: 1px solid #f3f4f6;
+	font-size: 0.625rem;
+}
+.hist-time { color: #9ca3af; font-family: monospace; flex-shrink: 0; }
+.hist-type { font-weight: 700; flex-shrink: 0; }
+.hist-type.buy  { color: var(--color-up); }
+.hist-type.sell { color: var(--color-down); }
+.hist-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #374151; }
+.hist-qty  { color: #6b7280; flex-shrink: 0; }
+.hist-ok   { flex-shrink: 0; font-weight: 600; }
+.hist-ok.ok   { color: #16a34a; }
+.hist-ok.fail { color: #ef4444; }
+
+.op-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
 	color: #9ca3af;
-	font-size: 0.8125rem;
-	text-align: center;
-	padding: 2rem 0.5rem;
 }
