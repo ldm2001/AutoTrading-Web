@@ -11,6 +11,7 @@
 	import DailyReport from '$lib/components/ai/DailyReport.svelte';
 	import PredictPanel from '$lib/components/predict/PredictPanel.svelte';
 	import Modal from '$lib/components/modal/Modal.svelte';
+	import { fly } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { indices, initAllStocks, fetchIndices, selectedStock, selectedStockDetail, fetchStockPrice, updateStockPrices } from '$lib/stores/stocks';
 	import { fetchTradingStatus, addConsoleMessage } from '$lib/stores/trading';
@@ -23,6 +24,7 @@
 	let showNews   = $state(false);
 	let showReport = $state(false);
 	let showPredict = $state(false);
+	let showOrder  = $state(false);
 
 	const stockInfo = $derived($selectedStockDetail);
 
@@ -132,18 +134,26 @@
 					<button class="action-btn report" onclick={() => showReport = true}>
 						리포트
 					</button>
+					<button class="action-btn order" onclick={() => showOrder = true}>
+						주식주문
+					</button>
 				</div>
 
 				<TradeConsole />
 			</div>
 
-			<!-- Right: Order Panel (always visible) -->
-			<div class="col-right">
-				<OrderPanel />
 			</div>
-		</div>
 	</main>
 </div>
+
+{#if showOrder}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="order-backdrop" onclick={() => showOrder = false}></div>
+	<div class="order-drawer" transition:fly={{ x: 360, duration: 200, opacity: 1 }}>
+		<OrderPanel onclose={() => showOrder = false} />
+	</div>
+{/if}
 
 <Modal open={showAI} title="AI 분석 - {stockInfo?.name ?? $selectedStock}" onclose={() => showAI = false}>
 	<AISignalPanel />

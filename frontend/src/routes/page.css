@@ -106,7 +106,7 @@
 
 @media (min-width: 1024px) {
 	.main-grid {
-		grid-template-columns: 2fr 6fr 2.5fr;
+		grid-template-columns: 220px 1fr;
 	}
 }
 
@@ -124,7 +124,7 @@
 
 .col-right {
 	min-height: 0;
-	overflow-y: auto;
+	overflow: hidden;
 }
 
 /* --- Action Bar --- */
@@ -182,4 +182,40 @@
 
 .action-btn.report:hover {
 	background-color: rgba(5, 150, 105, 0.06);
+}
+
+.action-btn.order {
+	color: #0f766e;
+}
+
+.action-btn.order:hover {
+	background-color: rgba(15, 118, 110, 0.06);
+}
+
+/* --- Order Drawer --- */
+.order-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.2);
+	z-index: 200;
+}
+
+.order-drawer {
+	position: fixed;
+	top: 0;
+	right: 0;
+	height: 100vh;
+	width: 520px;
+	z-index: 201;
+	display: flex;
+	flex-direction: column;
+	box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.order-drawer .op-wrap {
+	border-radius: 0;
+	border-top: none;
+	border-right: none;
+	border-bottom: none;
+	height: 100%;
 }

@@ -5,6 +5,8 @@
 	import type { OrderBook } from '$lib/types';
 	import './OrderPanel.css';
 
+	let { onclose }: { onclose?: () => void } = $props();
+
 	let tab      = $state<'buy' | 'sell'>('buy');
 	let histTab  = $state<'done' | 'pending'>('done');
 	let qty      = $state(0);
@@ -105,6 +107,9 @@
 			<span class="op-stock">{stockInfo.name}</span>
 			<span class="op-code">{$selectedStock} {stockInfo.market}</span>
 		{/if}
+		{#if onclose}
+			<button class="op-close" onclick={onclose}>✕</button>
+		{/if}
 	</div>
 
 	{#if stockInfo}
@@ -159,105 +164,106 @@
 
 			<!-- ── 주문 폼 ── -->
 			<div class="of-col">
-				<!-- 매수/매도 탭 -->
-				<div class="of-tabs">
-					<button class="of-tab" class:active={tab==='buy'} class:buy={tab==='buy'} onclick={() => tab='buy'}>매수</button>
-					<button class="of-tab" class:active={tab==='sell'} class:sell={tab==='sell'} onclick={() => tab='sell'}>매도</button>
-				</div>
+				<div class="of-form">
+					<!-- 매수/매도 탭 -->
+					<div class="of-tabs">
+						<button class="of-tab" class:active={tab==='buy'} class:buy={tab==='buy'} onclick={() => tab='buy'}>매수</button>
+						<button class="of-tab" class:active={tab==='sell'} class:sell={tab==='sell'} onclick={() => tab='sell'}>매도</button>
+					</div>
 
-				<!-- 가격 -->
-				<div class="of-row">
-					<span class="of-label">가격</span>
-					<div class="of-input-wrap">
-						<input type="number" bind:value={price} class="of-input" min="0" />
-						<span class="of-unit">원</span>
-						<div class="of-arrows">
-							<button onclick={() => price += 1}>∧</button>
-							<button onclick={() => price = Math.max(0, price - 1)}>∨</button>
+					<!-- 가격 -->
+					<div class="of-row">
+						<span class="of-label">가격</span>
+						<div class="of-input-wrap">
+							<input type="number" bind:value={price} class="of-input" min="0" />
+							<span class="of-unit">원</span>
+							<div class="of-arrows">
+								<button onclick={() => price += 1}>∧</button>
+								<button onclick={() => price = Math.max(0, price - 1)}>∨</button>
+							</div>
 						</div>
 					</div>
-				</div>
-				<p class="of-hint">✓ [거래량 있음] 주문 시 체결 처리 됩니다</p>
+					<p class="of-hint">✓ [거래량 있음] 주문 시 체결 처리 됩니다</p>
 
-				<!-- 수량 -->
-				<div class="of-row">
-					<span class="of-label">수량</span>
-					<span class="of-max">최대 {fmt(maxQty)}주</span>
-				</div>
-				<div class="of-row">
-					<div class="of-input-wrap qty">
-						<input type="number" bind:value={qty} class="of-input" min="0" />
-						<span class="of-unit">주</span>
-						<div class="of-arrows">
-							<button onclick={() => qty += 1}>∧</button>
-							<button onclick={() => qty = Math.max(0, qty - 1)}>∨</button>
+					<!-- 수량 -->
+					<div class="of-row">
+						<span class="of-label">수량</span>
+						<span class="of-max">최대 {fmt(maxQty)}주</span>
+					</div>
+					<div class="of-row">
+						<div class="of-input-wrap qty">
+							<input type="number" bind:value={qty} class="of-input" min="0" />
+							<span class="of-unit">주</span>
+							<div class="of-arrows">
+								<button onclick={() => qty += 1}>∧</button>
+								<button onclick={() => qty = Math.max(0, qty - 1)}>∨</button>
+							</div>
 						</div>
 					</div>
-				</div>
 
-				<!-- % 버튼 -->
-				<div class="of-pct-row">
-					{#each [10,25,50,100] as pct}
-						<button class="of-pct" onclick={() => setQtyPct(pct/100)}>{pct}%</button>
-					{/each}
-				</div>
-
-				<!-- 주문총액 -->
-				<div class="of-summary">
-					<span class="of-summary-label">최대 {fmt(cash)}원</span>
-				</div>
-				<div class="of-total-row">
-					<span class="of-label">주문총액</span>
-					<span class="of-total">{fmt(orderTotal)}원</span>
-				</div>
-
-				<!-- 주문 버튼 -->
-				<button
-					class="of-submit"
-					class:buy={tab==='buy'}
-					class:sell={tab==='sell'}
-					onclick={submit}
-					disabled={loading || qty <= 0}
-				>
-					{loading ? '처리중...' : tab === 'buy' ? '매수' : '매도'}
-				</button>
-
-				{#if result}
-					<div class="of-result" class:success={result.type==='success'} class:error={result.type==='error'}>
-						{result.msg}
+					<!-- % 버튼 -->
+					<div class="of-pct-row">
+						{#each [10,25,50,100] as pct}
+							<button class="of-pct" onclick={() => setQtyPct(pct/100)}>{pct}%</button>
+						{/each}
 					</div>
-				{/if}
+
+					<!-- 주문총액 -->
+					<div class="of-summary">
+						<span class="of-summary-label">최대 {fmt(cash)}원</span>
+					</div>
+					<div class="of-total-row">
+						<span class="of-label">주문총액</span>
+						<span class="of-total">{fmt(orderTotal)}원</span>
+					</div>
+
+					<!-- 주문 버튼 -->
+					<button
+						class="of-submit"
+						class:buy={tab==='buy'}
+						class:sell={tab==='sell'}
+						onclick={submit}
+						disabled={loading || qty <= 0}
+					>
+						{loading ? '처리중...' : tab === 'buy' ? '매수' : '매도'}
+					</button>
+
+					{#if result}
+						<div class="of-result" class:success={result.type==='success'} class:error={result.type==='error'}>
+							{result.msg}
+						</div>
+					{/if}
+				</div>
+
+				<!-- ── 체결/미체결 탭 (주문폼 바로 아래) ── -->
+				<div class="hist-tabs">
+					<button class="hist-tab" class:active={histTab==='done'} onclick={() => histTab='done'}>체결 내역</button>
+					<button class="hist-tab" class:active={histTab==='pending'} onclick={() => histTab='pending'}>미체결 내역</button>
+				</div>
+				<div class="hist-body">
+					{#if histTab === 'done'}
+						{#if $tradingStatus.today_trades.length === 0}
+							<div class="hist-empty">거래 내역이 없습니다</div>
+						{:else}
+							{#each $tradingStatus.today_trades as t}
+								<div class="hist-row">
+									<span class="hist-time">{t.time.split(' ')[1] ?? t.time}</span>
+									<span class="hist-type" class:buy={t.type==='buy'} class:sell={t.type==='sell'}>
+										{t.type === 'buy' ? '매수' : '매도'}
+									</span>
+									<span class="hist-name">{t.name || t.code}</span>
+									<span class="hist-qty">{t.qty}주</span>
+									<span class="hist-ok" class:ok={t.success} class:fail={!t.success}>
+										{t.success ? '체결' : '실패'}
+									</span>
+								</div>
+							{/each}
+						{/if}
+					{:else}
+						<div class="hist-empty">미체결 내역이 없습니다</div>
+					{/if}
+				</div>
 			</div>
-		</div>
-
-		<!-- ── 체결/미체결 탭 ── -->
-		<div class="hist-tabs">
-			<button class="hist-tab" class:active={histTab==='done'} onclick={() => histTab='done'}>체결 내역</button>
-			<button class="hist-tab" class:active={histTab==='pending'} onclick={() => histTab='pending'}>미체결 내역</button>
-		</div>
-
-		<div class="hist-body">
-			{#if histTab === 'done'}
-				{#if $tradingStatus.today_trades.length === 0}
-					<div class="hist-empty">거래 내역이 없습니다</div>
-				{:else}
-					{#each $tradingStatus.today_trades as t}
-						<div class="hist-row">
-							<span class="hist-time">{t.time.split(' ')[1] ?? t.time}</span>
-							<span class="hist-type" class:buy={t.type==='buy'} class:sell={t.type==='sell'}>
-								{t.type === 'buy' ? '매수' : '매도'}
-							</span>
-							<span class="hist-name">{t.name || t.code}</span>
-							<span class="hist-qty">{t.qty}주</span>
-							<span class="hist-ok" class:ok={t.success} class:fail={!t.success}>
-								{t.success ? '체결' : '실패'}
-							</span>
-						</div>
-					{/each}
-				{/if}
-			{:else}
-				<div class="hist-empty">미체결 내역이 없습니다</div>
-			{/if}
 		</div>
 	{:else}
 		<div class="op-empty">종목을 선택하세요</div>
