@@ -4,10 +4,13 @@ import datetime
 import json
 import logging
 from pathlib import Path
+from collections.abc import Callable
 from config import settings
 from service.kis import kis
 from service.discord import notify
-from service.strategy import evaluate, should_stop_loss
+from service.strategy import evaluate, stop_loss
+from service.candle_store import store as candle_store
+from service.tick_queue import tick_q
 
 logger = logging.getLogger(__name__)
 
@@ -15,13 +18,11 @@ logger = logging.getLogger(__name__)
 _TRADES_DIR = Path(__file__).resolve().parent.parent / "trades"
 _TRADES_DIR.mkdir(exist_ok=True)
 
-
 # 날짜별 거래 내역 파일 경로 반환
 def _trades_file(date: str | None = None) -> Path:
     if date is None:
         date = datetime.date.today().isoformat()
     return _TRADES_DIR / f"{date}.json"
-
 
 # 날짜별 거래 내역 로드 (없으면 빈 리스트)
 def _load_trades(date: str | None = None) -> list[dict]:
@@ -33,7 +34,6 @@ def _load_trades(date: str | None = None) -> list[dict]:
             pass
     return []
 
-
 # 거래 내역 파일에 단건 추가 저장
 def _save_trade(entry: dict) -> None:
     today = datetime.date.today().isoformat()
@@ -41,17 +41,15 @@ def _save_trade(entry: dict) -> None:
     trades.append(entry)
     _trades_file(today).write_text(json.dumps(trades, ensure_ascii=False, indent=2))
 
-
 class Bot:
-
     # 봇 상태 초기화 — running/bought/logs/콜백 세팅
     def __init__(self) -> None:
         self.running: bool = False
         self.bought: dict[str, dict] = {} # {"avg_price": int, "qty": int, "name": str}
         self.logs: list[dict] = []
         self._task: asyncio.Task | None = None
-        self.on_message: callable = None
-        self.on_trade: callable = None
+        self.on_message: Callable | None = None
+        self.on_trade: Callable | None = None
 
     # 봇 시작 — 오늘 거래 내역 복원 후 루프 실행
     async def start(self) -> None:
@@ -60,16 +58,19 @@ class Bot:
         self.running = True
         self.bought = {}
         self.logs = _load_trades()
+        await tick_q.start()
         self._task = asyncio.create_task(self._run())
         await self._msg("=== 자동매매 시작 ===")
 
-    # 봇 중지 — 루프 취소 후 종료 메시지 발송
+    # 봇 중지 — 캔들 flush + 틱큐 정지 후 종료
     async def stop(self) -> None:
         self.running = False
         if self._task:
             self._task.cancel()
             self._task = None
-        await self._msg("=== 자동매매 종료 ===")
+        saved = await candle_store.flush()
+        await tick_q.stop()
+        await self._msg(f"=== 자동매매 종료 (캔들 {saved}건 저장) ===")
 
     # 현재 봇 상태 반환 (실행 여부, 보유 종목, 오늘 거래 내역)
     def status(self) -> dict:
@@ -109,17 +110,20 @@ class Bot:
         if self.on_trade:
             await self.on_trade(entry)
 
-    # ── 손절/익절 모니터링 ──
+    # ── 손절/익절 모니터링 (동적 손절 지원) ──
     async def _check_holdings(self) -> None:
         for code, info in list(self.bought.items()):
             try:
-                # 손절 체크
-                should_stop, pnl = await should_stop_loss(
-                    code, info["avg_price"], settings.stop_loss_pct
+                sp = info.get("stop_price")
+                should_stop, pnl = await stop_loss(
+                    code, info["avg_price"],
+                    structural_price=sp,
+                    fallback_pct=settings.stop_loss_pct,
                 )
                 if should_stop:
+                    label = f"구조적 {sp:,.0f}" if sp else f"{settings.stop_loss_pct}%"
                     await self._msg(
-                        f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% ≤ {settings.stop_loss_pct}%"
+                        f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
                     )
                     result = await kis.sell(code, info["qty"])
                     cp = await kis.price_raw(code)
@@ -142,10 +146,10 @@ class Bot:
             except Exception as e:
                 logger.error(f"Holdings check error ({code}): {e}")
 
-    # ── 멀티팩터 매수 판단 ──
+    # 멀티팩터 매수 판단 
     async def _try_buy(self, sym: str, buy_amount: float) -> None:
         try:
-            # 예측 데이터 (선택)
+            # 예측 데이터
             prediction = None
             if settings.use_prediction:
                 try:
@@ -173,17 +177,25 @@ class Bot:
                 f"[매수 시그널] {sym} 스코어={score:+.0f} ({', '.join(factor_strs)})"
             )
 
+            # 동적 손절가 로그
+            sp = result.get("stop_price")
+            if sp:
+                await self._msg(f"  → 구조적 손절가: {sp:,.0f}원")
+
             order = await kis.buy(sym, qty)
             if order["success"]:
                 from service.kis import NAMES
                 name = NAMES.get(sym, sym)
-                self.bought[sym] = {"avg_price": cp, "qty": qty, "name": name}
+                self.bought[sym] = {
+                    "avg_price": cp, "qty": qty, "name": name,
+                    "stop_price": sp,
+                }
             await self._log(sym, "", "buy", qty, cp, order["success"])
 
         except Exception as e:
             logger.error(f"Buy check error ({sym}): {e}")
 
-    # ── 메인 루프 ──
+    # 메인 루프 
     async def _run(self) -> None:
         try:
             total_cash = await kis.cash()
@@ -283,6 +295,5 @@ class Bot:
             logger.exception("Bot error")
         finally:
             self.running = False
-
 
 bot = Bot()

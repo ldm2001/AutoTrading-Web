@@ -202,17 +202,15 @@ def structure_break(candles: list[dict], swing_length: int = 5) -> dict:
         if levels[0] > levels[2] and levels[1] > levels[3]:
             return {"bos": -1, "choch": 0, "level": levels[2]}
 
-    # Bullish CHoCH: 하락 구조(LH-LL)에서 최근 고점 돌파
+    # Bullish CHoCH: 하락 추세(LH)에서 저점 비갱신 - 구조 전환
     if kinds == ["high", "low", "high", "low"]:
-        if levels[2] < levels[0] and levels[3] < levels[1]:
-            if levels[3] > levels[1]:   # 저점이 갱신되지 않음 → CHoCH
-                return {"bos": 0, "choch": 1, "level": levels[2]}
+        if levels[2] < levels[0] and levels[3] > levels[1]:
+            return {"bos": 0, "choch": 1, "level": levels[2]}
 
-    # Bearish CHoCH: 상승 구조(HH-HL)에서 최근 저점 하향 이탈
+    # Bearish CHoCH: 상승 추세(HL)에서 고점 비갱신 - 구조 전환
     if kinds == ["low", "high", "low", "high"]:
-        if levels[2] > levels[0] and levels[3] > levels[1]:
-            if levels[3] < levels[1]:
-                return {"bos": 0, "choch": -1, "level": levels[2]}
+        if levels[2] > levels[0] and levels[3] < levels[1]:
+            return {"bos": 0, "choch": -1, "level": levels[2]}
 
     return {"bos": 0, "choch": 0, "level": 0.0}
 
@@ -310,6 +308,45 @@ def structure_score(candles: list[dict]) -> tuple[float, str]:
     if sb["choch"] == -1:
         return -3.0, f"Bearish CHoCH — 상승→하락 전환 신호 (레벨 {sb['level']:,.0f})"
     return 0.0, "구조 중립"
+
+# 분봉 FVG 점수 — 15분봉에서 최신 미완화 FVG 지지/저항 점수 + 존 반환
+def fvg_intraday(candles_15m: list[dict], price: float) -> tuple[float, str, dict | None]:
+    if len(candles_15m) < 5:
+        return 0.0, "분봉 데이터 부족", None
+    fvgs = fvg_zones(candles_15m)
+    active = active_zones(fvgs)
+    if not active:
+        return 0.0, "분봉 FVG 없음", None
+    z = min(active, key=lambda z: abs(price - (z["top"] + z["bottom"]) / 2))
+    mid = (z["top"] + z["bottom"]) / 2
+    dist = abs(price - mid) / mid * 100
+    inside = z["bottom"] <= price <= z["top"]
+    if z["kind"] == "bullish":
+        if inside:
+            return 10.0, f"15m Bullish FVG 진입 ({z['bottom']:,.0f}~{z['top']:,.0f})", z
+        if dist < 0.5:
+            return 6.0, f"15m Bullish FVG 근접 ({dist:.2f}%)", z
+        if dist < 1.5:
+            return 3.0, f"15m Bullish FVG 접근 ({dist:.2f}%)", z
+    else:
+        if inside:
+            return -10.0, f"15m Bearish FVG 진입 ({z['bottom']:,.0f}~{z['top']:,.0f})", z
+        if dist < 0.5:
+            return -6.0, f"15m Bearish FVG 근접 ({dist:.2f}%)", z
+        if dist < 1.5:
+            return -3.0, f"15m Bearish FVG 접근 ({dist:.2f}%)", z
+    return 0.0, f"15m FVG 원격 ({dist:.1f}%)", z
+
+
+# FVG 기반 구조적 손절가 — 가장 가까운 Bullish FVG 하단 (지지선)
+def structural_stop(candles: list[dict], price: float) -> float | None:
+    fvgs = fvg_zones(candles)
+    bull_below = [z for z in active_zones(fvgs)
+                  if z["kind"] == "bullish" and z["bottom"] < price]
+    if not bull_below:
+        return None
+    return float(max(bull_below, key=lambda z: z["bottom"])["bottom"])
+
 
 # SMC 전체 분석 요약 — fvg/ob/str 점수 + active 구간 수
 def analysis(candles: list[dict], price: float) -> dict:

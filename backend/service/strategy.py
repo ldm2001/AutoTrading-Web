@@ -10,13 +10,15 @@ from service import smc
 logger = logging.getLogger(__name__)
 
 # 팩터별 최대 점수 (합계 100점)
-W_RSI     = 20 # 25 -> 20: 방향성 참고용 유지
-W_MACD    = 20 # 25 -> 20: 모멘텀 확인용 유지
-W_BB      = 15 # 20 -> 15: 밴드 위치 참고
-W_VOL     = 15 # 유지: 변동성 돌파 (국장 핵심 전략)
-W_PREDICT = 15 # 유지: Transformer 예측
-W_FVG     = 8  # 신규: Fair Value Gap 근접도 (유동성 공백 회귀 확률)
-W_OB      = 7  # 신규: Order Block 지지/저항 (기관 주문 집중 좌표)
+W_RSI      = 15 # 방향성 참고
+W_MACD     = 15 # 모멘텀 확인
+W_BB       = 10 # 밴드 위치 참고
+W_VOL      = 12 # 변동성 돌파
+W_PREDICT  = 10 # 5일 예측 -> 방향성 필터
+W_FVG      = 8  # 일봉 FVG 근접도
+W_OB       = 7  # 일봉 OB 지지/저항
+W_FVG_15M  = 15 # 15분봉 FVG — 실제 진입 트리거
+W_STRUCT   = 8  # BOS/CHoCH 구조 점수
 
 # 매수/매도 진입 임계값
 BUY_THRESHOLD  = 55
@@ -104,7 +106,7 @@ class Scorer:
             return W_VOL * 0.3, f"변동성 돌파 근접 (목표 {target:,.0f}, 현재 {price:,})"
         return 0, f"변동성 미돌파 (목표 {target:,.0f})"
 
-    # FVG 근접도 점수화 (-8 ~ +8) — 일봉 기반 (분봉 사용 시 정밀도 향상)
+    # 일봉 FVG 근접도 점수화 (-8 ~ +8)
     def _fvg(self, candles: list[dict], price: int) -> tuple[float, str]:
         try:
             s, r = smc.fvg_score(candles, float(price))
@@ -112,7 +114,7 @@ class Scorer:
         except Exception:
             return 0.0, "FVG 계산 오류"
 
-    # OB 지지/저항 점수화 (-7 ~ +7) — 기관 주문 집중 좌표
+    # OB 지지/저항 점수화 (-7 ~ +7)
     def _ob(self, candles: list[dict], price: int) -> tuple[float, str]:
         try:
             s, r = smc.ob_score(candles, float(price))
@@ -120,7 +122,23 @@ class Scorer:
         except Exception:
             return 0.0, "OB 계산 오류"
 
-    # Transformer 예측 점수화 (-15 ~ +15)
+    # 15분봉 FVG 점수화 (-15 ~ +15) — 실제 진입 트리거
+    def _fvg_15m(self, candles_15m: list[dict], price: int) -> tuple[float, str]:
+        try:
+            s, r, _ = smc.fvg_intraday(candles_15m, float(price))
+            return round(s * (W_FVG_15M / 10), 1), r
+        except Exception:
+            return 0.0, "15m FVG 계산 오류"
+
+    # BOS/CHoCH 구조 점수화 (-8 ~ +8)
+    def _struct(self, candles: list[dict]) -> tuple[float, str]:
+        try:
+            s, r = smc.structure_score(candles)
+            return round(s * (W_STRUCT / 5), 1), r
+        except Exception:
+            return 0.0, "구조 분석 오류"
+
+    # Transformer 예측 → 방향성 필터 (-10 ~ +10)
     def _pred(self, prediction: dict | None, price: int) -> tuple[float, str]:
         if prediction is None:
             return 0, "예측 데이터 없음"
@@ -135,25 +153,24 @@ class Scorer:
             if p["close"] > prev:
                 uptrend_cnt += 1
             prev = p["close"]
+        # 방향성 필터: 강한 추세만 반영 (±3% 이상)
         if change_pct > 3 and uptrend_cnt >= 3:
-            return W_PREDICT, f"AI 예측 +{change_pct:.1f}% (5일 상승 추세)"
+            return W_PREDICT, f"방향 필터: 상승 +{change_pct:.1f}% (5일)"
         if change_pct > 1:
-            return W_PREDICT * 0.6, f"AI 예측 +{change_pct:.1f}% (소폭 상승)"
+            return W_PREDICT * 0.5, f"방향 필터: 약상승 +{change_pct:.1f}%"
         if change_pct < -3 and uptrend_cnt <= 1:
-            return -W_PREDICT, f"AI 예측 {change_pct:.1f}% (5일 하락 추세)"
+            return -W_PREDICT, f"방향 필터: 하락 {change_pct:.1f}% (5일)"
         if change_pct < -1:
-            return -W_PREDICT * 0.6, f"AI 예측 {change_pct:.1f}% (소폭 하락)"
-        return 0, f"AI 예측 {change_pct:+.1f}% (중립)"
+            return -W_PREDICT * 0.5, f"방향 필터: 약하락 {change_pct:.1f}%"
+        return 0, f"방향 필터: 중립 {change_pct:+.1f}%"
 
-    # 종목 종합 평가 (멀티팩터 스코어링 — SMC 통합)
+    # 종목 종합 평가 (멀티팩터 + 15분봉 FVG 앙상블)
     async def evaluate(self, code: str, prediction: dict | None = None) -> dict:
-        # prediction 없을 때만 캐시 활용
         if prediction is None:
             cached = _cache.get(code)
             if cached and time.time() < cached[0]:
                 return cached[1]
         try:
-            # daily + price + 15분봉 병렬 요청
             candles, price_info, candles_15m = await asyncio.gather(
                 kis.daily(code),
                 kis.price(code),
@@ -162,28 +179,36 @@ class Scorer:
             current_price = price_info["price"]
             ind = indicators.summary(candles)
 
-            # SMC: 15분봉 있으면 사용, 없으면 일봉 폴백
+            # 15분봉 없으면 일봉 폴백
             smc_candles = candles_15m if candles_15m else candles
 
-            rsi_s,  rsi_r  = self._rsi(ind["rsi"])
-            macd_s, macd_r = self._macd(ind["macd"])
-            bb_s,   bb_r   = self._bb(ind["bollinger"])
-            vol_s,  vol_r  = self._vol(candles, current_price)
-            pred_s, pred_r = self._pred(prediction, current_price)
-            fvg_s,  fvg_r  = self._fvg(smc_candles, current_price)
-            ob_s,   ob_r   = self._ob(smc_candles, current_price)
+            rsi_s,    rsi_r    = self._rsi(ind["rsi"])
+            macd_s,   macd_r   = self._macd(ind["macd"])
+            bb_s,     bb_r     = self._bb(ind["bollinger"])
+            vol_s,    vol_r    = self._vol(candles, current_price)
+            pred_s,   pred_r   = self._pred(prediction, current_price)
+            fvg_s,    fvg_r    = self._fvg(candles, current_price)
+            ob_s,     ob_r     = self._ob(candles, current_price)
+            fvg15_s,  fvg15_r  = self._fvg_15m(smc_candles, current_price)
+            str_s,    str_r    = self._struct(smc_candles)
 
-            total = rsi_s + macd_s + bb_s + vol_s + pred_s + fvg_s + ob_s
+            total = (rsi_s + macd_s + bb_s + vol_s + pred_s
+                     + fvg_s + ob_s + fvg15_s + str_s)
 
             factors = [
-                {"name": "RSI",        "score": round(rsi_s,  1), "max": W_RSI,     "reason": rsi_r},
-                {"name": "MACD",       "score": round(macd_s, 1), "max": W_MACD,    "reason": macd_r},
-                {"name": "Bollinger",  "score": round(bb_s,   1), "max": W_BB,      "reason": bb_r},
-                {"name": "Volatility", "score": round(vol_s,  1), "max": W_VOL,     "reason": vol_r},
-                {"name": "AI Predict", "score": round(pred_s, 1), "max": W_PREDICT, "reason": pred_r},
-                {"name": "FVG",        "score": round(fvg_s,  1), "max": W_FVG,     "reason": fvg_r},
-                {"name": "OrderBlock", "score": round(ob_s,   1), "max": W_OB,      "reason": ob_r},
+                {"name": "RSI",        "score": round(rsi_s,   1), "max": W_RSI,     "reason": rsi_r},
+                {"name": "MACD",       "score": round(macd_s,  1), "max": W_MACD,    "reason": macd_r},
+                {"name": "Bollinger",  "score": round(bb_s,    1), "max": W_BB,      "reason": bb_r},
+                {"name": "Volatility", "score": round(vol_s,   1), "max": W_VOL,     "reason": vol_r},
+                {"name": "Direction",  "score": round(pred_s,  1), "max": W_PREDICT, "reason": pred_r},
+                {"name": "FVG",        "score": round(fvg_s,   1), "max": W_FVG,     "reason": fvg_r},
+                {"name": "OrderBlock", "score": round(ob_s,    1), "max": W_OB,      "reason": ob_r},
+                {"name": "FVG 15m",    "score": round(fvg15_s, 1), "max": W_FVG_15M, "reason": fvg15_r},
+                {"name": "Structure",  "score": round(str_s,   1), "max": W_STRUCT,  "reason": str_r},
             ]
+
+            # 동적 손절가 계산 (15분봉 FVG 하단 기반)
+            stop_price = smc.structural_stop(smc_candles, float(current_price))
 
             if total >= BUY_THRESHOLD:
                 signal  = "buy"
@@ -196,11 +221,12 @@ class Scorer:
                 summary = f"관망 (스코어 {total:+.0f}/100)"
 
             result = {
-                "signal":  signal,
-                "score":   round(total, 1),
-                "factors": factors,
-                "summary": summary,
-                "price":   current_price,
+                "signal":     signal,
+                "score":      round(total, 1),
+                "factors":    factors,
+                "summary":    summary,
+                "price":      current_price,
+                "stop_price": stop_price,
             }
 
             if prediction is None:
@@ -210,21 +236,30 @@ class Scorer:
         except Exception as e:
             logger.error(f"Strategy evaluate failed for {code}: {e}")
             return {
-                "signal":  "hold",
-                "score":   0,
-                "factors": [],
-                "summary": f"평가 실패: {e}",
-                "price":   0,
+                "signal":     "hold",
+                "score":      0,
+                "factors":    [],
+                "summary":    f"평가 실패: {e}",
+                "price":      0,
+                "stop_price": None,
             }
 
-    # 손절 판단 (기본 -3%)
+    # 동적 손절 — FVG 구조적 손절가 우선, 폴백으로 고정 %
     async def stop_loss(
-        self, code: str, avg_price: int, pct: float = -3.0
+        self, code: str, avg_price: int,
+        structural_price: float | None = None,
+        fallback_pct: float = -3.0,
     ) -> tuple[bool, float]:
         try:
             current = await kis.price_raw(code)
-            pnl     = (current - avg_price) / avg_price * 100
-            return pnl <= pct, pnl
+            pnl = (current - avg_price) / avg_price * 100
+
+            # 구조적 손절가가 있으면 그 가격 하회 시 손절
+            if structural_price and current < structural_price:
+                return True, pnl
+
+            # 폴백: 고정 % 손절
+            return pnl <= fallback_pct, pnl
         except Exception:
             return False, 0.0
 
@@ -232,6 +267,6 @@ class Scorer:
 # 모듈 레벨 인스턴스
 scorer = Scorer()
 
-# 하위 호환 별칭
-evaluate         = scorer.evaluate
-should_stop_loss = scorer.stop_loss
+# 하위 호환
+evaluate  = scorer.evaluate
+stop_loss = scorer.stop_loss
