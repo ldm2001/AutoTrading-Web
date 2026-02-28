@@ -40,7 +40,7 @@
 		return Math.min(...c.map(x => x.low));
 	});
 
-	// 캔들 배열 → 상승 빨강 / 하락 파랑 per-point 라인 데이터
+	// 캔들 배열 - 상승 빨강 / 하락 파랑 per-point 라인 데이터
 	function toColoredLine(candles: DailyCandle[]) {
 		return candles.map((c, i) => ({
 			time: c.date,

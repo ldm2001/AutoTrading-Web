@@ -7,8 +7,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from api import stock_router, trade_router, ws_router, ai_router, predict_router, manager, price_loop
+from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
 from service import kis, bot, load_all_stocks
+from service.sector import load_sectors
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Loading all stock listings")
     load_all_stocks()
+    load_sectors()
     logger.info("Starting KIS API")
     await kis.start()
     logger.info("KIS API ready")
@@ -52,6 +54,7 @@ app.include_router(trade_router)
 app.include_router(ws_router)
 app.include_router(ai_router)
 app.include_router(predict_router)
+app.include_router(backtest_router)
 
 # 서버 상태 확인 (봇 실행 여부 포함)
 @app.get("/api/health")

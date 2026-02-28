@@ -192,6 +192,22 @@
 	background-color: rgba(15, 118, 110, 0.06);
 }
 
+.action-btn.backtest {
+	color: #b45309;
+}
+
+.action-btn.backtest:hover {
+	background-color: rgba(180, 83, 9, 0.06);
+}
+
+.action-btn.heatmap {
+	color: #dc2626;
+}
+
+.action-btn.heatmap:hover {
+	background-color: rgba(220, 38, 38, 0.06);
+}
+
 /* --- Order Drawer --- */
 .order-backdrop {
 	position: fixed;

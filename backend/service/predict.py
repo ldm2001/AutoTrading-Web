@@ -15,7 +15,6 @@ from sklearn.metrics import mean_absolute_error
 
 logger = logging.getLogger(__name__)
 
-
 # 시계열 데이터셋
 class StockDataset(Dataset):
     def __init__(self, X: np.ndarray, y: np.ndarray):
@@ -27,7 +26,6 @@ class StockDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
-
 
 # 시퀀스 위치 인코딩
 class PositionalEncoding(nn.Module):
@@ -45,7 +43,6 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         return x + self.pe[: x.size(0), :]
-
 
 # Transformer 인코더 기반 주가 예측 모델
 class StockTransformer(nn.Module):
@@ -77,7 +74,6 @@ class StockTransformer(nn.Module):
         x = x.permute(1, 0, 2)
         x = self.transformer_encoder(x)
         return self.fc(x)
-
 
 class Predictor:
 
@@ -131,7 +127,7 @@ class Predictor:
         df = df.fillna(0)
         return df
 
-    # Transformer 학습 및 5일 예측 (동기 실행, ThreadPool 에서 호출)
+    # Transformer 학습 및 5일 예측
     def _run(
         self,
         symbol: str,
@@ -253,6 +249,13 @@ class Predictor:
             "metrics":     {"mae": round(mae, 4), "accuracy_pct": accuracy},
         }
 
+    # 캐시된 예측 조회 (없으면 None)
+    def cached(self, symbol: str) -> dict | None:
+        symbol = symbol.zfill(6)
+        if symbol in self._cache and time.time() - self._cache_time.get(symbol, 0) < self._CACHE_TTL:
+            return self._cache[symbol]
+        return None
+
     # 비동기 예측 진입점 (캐시 포함)
     async def predict(self, symbol: str) -> dict:
         symbol = symbol.zfill(6)
@@ -265,7 +268,6 @@ class Predictor:
         self._cache[symbol]      = result
         self._cache_time[symbol] = now
         return result
-
 
 # 모듈 레벨 인스턴스
 predictor = Predictor()

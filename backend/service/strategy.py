@@ -24,7 +24,7 @@ W_STRUCT   = 8  # BOS/CHoCH 구조 점수
 BUY_THRESHOLD  = 55
 SELL_THRESHOLD = -40
 
-# 평가 캐시 (prediction=None 일 때만 저장, 2분 TTL)
+# 평가 캐시
 _cache: dict[str, tuple[float, dict]] = {}
 _TTL   = 120
 
@@ -165,21 +165,25 @@ class Scorer:
         return 0, f"방향 필터: 중립 {change_pct:+.1f}%"
 
     # 종목 종합 평가 (멀티팩터 + 15분봉 FVG 앙상블)
-    async def evaluate(self, code: str, prediction: dict | None = None) -> dict:
-        if prediction is None:
+    # fast=True: 1단계 스크리닝용 (15분봉 스킵 → API 호출 2건으로 축소)
+    async def evaluate(self, code: str, prediction: dict | None = None, fast: bool = False) -> dict:
+        if prediction is None and not fast:
             cached = _cache.get(code)
             if cached and time.time() < cached[0]:
                 return cached[1]
         try:
-            candles, price_info, candles_15m = await asyncio.gather(
-                kis.daily(code),
-                kis.price(code),
-                kis.candles_15m(code),
-            )
+            if fast:
+                candles, price_info = await asyncio.gather(
+                    kis.daily(code), kis.price(code),
+                )
+                candles_15m = []
+            else:
+                candles, price_info, candles_15m = await asyncio.gather(
+                    kis.daily(code), kis.price(code), kis.candles_15m(code),
+                )
             current_price = price_info["price"]
             ind = indicators.summary(candles)
 
-            # 15분봉 없으면 일봉 폴백
             smc_candles = candles_15m if candles_15m else candles
 
             rsi_s,    rsi_r    = self._rsi(ind["rsi"])

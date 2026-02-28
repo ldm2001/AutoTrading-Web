@@ -31,7 +31,7 @@
 	{#if $predictionLoading}
 		<div class="predict-loading">
 			<div class="predict-spinner"></div>
-			<span>Transformer 모델 학습 중...</span>
+			<span>모델 학습 중</span>
 			<span class="predict-progress">1년치 데이터 수집 → 학습 → 5일 예측 (약 10~30초)</span>
 		</div>
 	{:else if $prediction && $prediction.predictions.length > 0}

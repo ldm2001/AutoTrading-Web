@@ -137,6 +137,21 @@ export interface OrderBook {
 	bids: OrderLevel[];
 }
 
+export interface HeatmapStock {
+	code: string;
+	name: string;
+	profit_loss_pct: number;
+}
+
+export interface SectorCell {
+	sector: string;
+	weight_pct: number;
+	avg_return: number;
+	eval_amount: number;
+	profit_loss: number;
+	stocks: HeatmapStock[];
+}
+
 export interface PredictionCandle {
 	date: string;
 	open: number;

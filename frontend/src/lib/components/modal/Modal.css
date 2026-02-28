@@ -15,8 +15,8 @@
 	background-color: #ffffff;
 	border: 1px solid var(--color-border);
 	border-radius: 0.75rem;
-	width: 90vw;
-	max-width: 32rem;
+	width: 92vw;
+	max-width: 48rem;
 	max-height: 85vh;
 	display: flex;
 	flex-direction: column;
@@ -34,7 +34,7 @@
 }
 
 .modal-title {
-	font-size: 0.9375rem;
+	font-size: 1rem;
 	font-weight: 600;
 	color: #111827;
 }
@@ -60,7 +60,7 @@
 }
 
 .modal-body {
-	padding: 1rem;
+	padding: 1.25rem 1.5rem;
 	overflow-y: auto;
 }
 

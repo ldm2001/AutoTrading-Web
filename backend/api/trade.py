@@ -117,6 +117,49 @@ async def sell(order: OrderRequest):
         raise HTTPException(502, f"Sell failed: {e}")
 
 
+# 섹터별 포트폴리오 히트맵 데이터
+@router.get("/portfolio/heatmap")
+async def portfolio_heatmap():
+    from service.sector import sector_of
+    try:
+        items, _ = await kis.holdings()
+        item_list = list(items.values())
+        total_eval = sum(i["eval_amount"] for i in item_list) or 1
+
+        sectors: dict[str, dict] = {}
+        for item in item_list:
+            sector = sector_of(item["code"])
+            if sector not in sectors:
+                sectors[sector] = {"eval_amount": 0, "profit_loss": 0, "stocks": []}
+            s = sectors[sector]
+            s["eval_amount"] += item["eval_amount"]
+            s["profit_loss"] += item["profit_loss"]
+            s["stocks"].append({
+                "code": item["code"],
+                "name": item["name"],
+                "profit_loss_pct": item["profit_loss_percent"],
+            })
+
+        result = []
+        for name, s in sectors.items():
+            weight = round(s["eval_amount"] / total_eval * 100, 1)
+            avg_ret = round(
+                sum(st["profit_loss_pct"] for st in s["stocks"]) / len(s["stocks"]), 2
+            )
+            result.append({
+                "sector":      name,
+                "weight_pct":  weight,
+                "avg_return":  avg_ret,
+                "eval_amount": s["eval_amount"],
+                "profit_loss": s["profit_loss"],
+                "stocks":      s["stocks"],
+            })
+        result.sort(key=lambda x: x["weight_pct"], reverse=True)
+        return result
+    except Exception as e:
+        raise HTTPException(502, f"KIS API error: {e}")
+
+
 # 거래 내역 조회 (날짜별, 기본=오늘)
 @router.get("/history")
 async def history(date: str | None = None):

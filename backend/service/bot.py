@@ -231,7 +231,7 @@ class Bot:
             await self._msg(f"평가 손익: {int(evaluation.get('evlu_pfls_smtl_amt', '0')):,}원")
             await self._msg(f"총 평가: {int(evaluation.get('tot_evlu_amt', '0')):,}원")
             await self._msg(f"매수 가능: {total_cash:,}원 (종목당 {buy_amount:,.0f}원)")
-            await self._msg(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절{settings.stop_loss_pct}%, 익절+{settings.take_profit_pct}%)")
+            await self._msg(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절=FVG동적(폴백{settings.stop_loss_pct}%), 익절+{settings.take_profit_pct}%)")
             await self._msg("==================")
 
             soldout = False

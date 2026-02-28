@@ -1,9 +1,9 @@
 .report-panel {
-	padding: 0;
+	padding: 0.5rem 0;
 }
 
 .report-content {
-	font-size: 0.8125rem;
+	font-size: 0.875rem;
 	color: #374151;
 	line-height: 1.6;
 	white-space: pre-wrap;

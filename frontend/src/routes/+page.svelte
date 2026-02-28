@@ -10,6 +10,8 @@
 	import NewsPanel from '$lib/components/ai/NewsPanel.svelte';
 	import DailyReport from '$lib/components/ai/DailyReport.svelte';
 	import PredictPanel from '$lib/components/predict/PredictPanel.svelte';
+	import BacktestPanel from '$lib/components/backtest/BacktestPanel.svelte';
+	import SectorHeatmap from '$lib/components/heatmap/SectorHeatmap.svelte';
 	import Modal from '$lib/components/modal/Modal.svelte';
 	import { fly } from 'svelte/transition';
 	import { get } from 'svelte/store';
@@ -24,7 +26,9 @@
 	let showNews   = $state(false);
 	let showReport = $state(false);
 	let showPredict = $state(false);
-	let showOrder  = $state(false);
+	let showOrder    = $state(false);
+	let showBacktest = $state(false);
+	let showHeatmap  = $state(false);
 
 	const stockInfo = $derived($selectedStockDetail);
 
@@ -134,6 +138,12 @@
 					<button class="action-btn report" onclick={() => showReport = true}>
 						리포트
 					</button>
+					<button class="action-btn backtest" onclick={() => showBacktest = true}>
+						백테스트
+					</button>
+					<button class="action-btn heatmap" onclick={() => showHeatmap = true}>
+						섹터맵
+					</button>
 					<button class="action-btn order" onclick={() => showOrder = true}>
 						주식주문
 					</button>
@@ -169,4 +179,12 @@
 
 <Modal open={showPredict} title="AI 주가 예측 - {stockInfo?.name ?? $selectedStock}" onclose={() => showPredict = false}>
 	<PredictPanel />
+</Modal>
+
+<Modal open={showBacktest} title="백테스트 - {stockInfo?.name ?? $selectedStock}" onclose={() => showBacktest = false}>
+	<BacktestPanel />
+</Modal>
+
+<Modal open={showHeatmap} title="섹터 히트맵" onclose={() => showHeatmap = false}>
+	<SectorHeatmap />
 </Modal>
