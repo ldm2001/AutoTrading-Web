@@ -235,7 +235,7 @@
 						onclick={submit}
 						disabled={loading || qty <= 0}
 					>
-						{loading ? '처리중...' : tab === 'buy' ? '매수' : '매도'}
+						{loading ? '처리중' : tab === 'buy' ? '매수' : '매도'}
 					</button>
 
 					{#if result}

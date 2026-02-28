@@ -167,7 +167,7 @@
 
 			{#if filteredStocks.length === 0}
 				<div class="watchlist-empty">
-					{searchInput ? '검색 결과가 없습니다' : '종목을 불러오는 중...'}
+					{searchInput ? '검색 결과가 없습니다' : '종목을 불러오는 중'}
 				</div>
 			{/if}
 		</div>
@@ -181,7 +181,7 @@
 		<div class="watchlist-header ai-header">
 			<span class="watchlist-title ai-title">AI 추천</span>
 			<button class="refresh-btn" onclick={fetchRecommendations} disabled={$recommendLoading}>
-				{$recommendLoading ? '분석중...' : '새로고침'}
+				{$recommendLoading ? '분석중' : '새로고침'}
 			</button>
 		</div>
 

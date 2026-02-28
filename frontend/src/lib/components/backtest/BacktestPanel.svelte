@@ -109,14 +109,14 @@
 			<input type="number" bind:value={maxBars} min="5" max="100" />
 		</div>
 		<button class="btn-run" onclick={runBacktest} disabled={loading || !$selectedStock}>
-			{loading ? '실행 중...' : '실행'}
+			{loading ? '실행 중' : '실행'}
 		</button>
 	</div>
 
 	{#if loading}
 		<div class="backtest-loading">
 			<div class="backtest-spinner"></div>
-			<span>백테스트 실행 중... (팩터 계산 포함)</span>
+			<span>백테스트 실행 중 (팩터 계산 포함)</span>
 		</div>
 	{:else if error}
 		<div class="backtest-error">{error}</div>

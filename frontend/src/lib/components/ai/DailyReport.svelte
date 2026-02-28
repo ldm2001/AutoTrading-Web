@@ -14,7 +14,7 @@
 
 <div class="report-panel">
 	{#if loading}
-		<div class="report-loading">리포트 생성 중...</div>
+		<div class="report-loading">리포트 생성 중</div>
 	{:else if $dailyReport}
 		<div class="report-content">{$dailyReport}</div>
 	{:else}
