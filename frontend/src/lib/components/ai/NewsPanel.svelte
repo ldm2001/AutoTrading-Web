@@ -1,6 +1,15 @@
 <script lang="ts">
-	import { newsSentiment } from '$lib/stores/ai';
+	import { newsSentiment, fetchNewsSentiment } from '$lib/stores/ai';
+	import { selectedStock } from '$lib/stores/stocks';
 	import './NewsPanel.css';
+
+	// 종목 변경 시 뉴스 자동 fetch
+	$effect(() => {
+		const code = $selectedStock;
+		if (code && $newsSentiment?.code !== code) {
+			fetchNewsSentiment(code);
+		}
+	});
 
 	function sentimentColor(score: number): string {
 		if (score > 20) return 'positive';

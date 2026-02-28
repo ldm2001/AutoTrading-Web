@@ -127,9 +127,8 @@
 	color: #374151;
 	padding-left: 1rem;
 	position: relative;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	white-space: normal;
+	word-break: keep-all;
 }
 
 .ai-reason-item::before {
