@@ -96,18 +96,18 @@
 <div class="backtest-panel">
 	<!-- Parameter Form -->
 	<div class="backtest-form">
-		<div class="form-group">
-			<label>기간 (일)</label>
+		<label class="form-group">
+			<span>기간 (일)</span>
 			<input type="number" bind:value={days} min="7" max="180" />
-		</div>
-		<div class="form-group">
-			<label>익절 (%)</label>
+		</label>
+		<label class="form-group">
+			<span>익절 (%)</span>
 			<input type="number" bind:value={tpPct} min="1" max="20" step="0.5" />
-		</div>
-		<div class="form-group">
-			<label>최대보유 (봉)</label>
+		</label>
+		<label class="form-group">
+			<span>최대보유 (봉)</span>
 			<input type="number" bind:value={maxBars} min="5" max="100" />
-		</div>
+		</label>
 		<button class="btn-run" onclick={runBacktest} disabled={loading || !$selectedStock}>
 			{loading ? '실행 중' : '실행'}
 		</button>
