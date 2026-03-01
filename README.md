@@ -302,12 +302,12 @@ npm run dev
 ---
 
 ## Preview
-<img width="1728" height="961" alt="메인 템플릿" src="https://github.com/user-attachments/assets/2823e7b0-4592-434f-9c19-6f5d6e095577" />
-<img width="1728" height="961" alt="주식 주문" src="https://github.com/user-attachments/assets/9f507216-13d9-4e64-b750-192ed08a6f00" />
-<img width="1728" height="961" alt="AI 종목 추천" src="https://github.com/user-attachments/assets/7e1f7068-95a1-4ff9-89ad-49d70a44be69" />
-<img width="1728" height="961" alt="주가 5일 예측" src="https://github.com/user-attachments/assets/80c87c8e-5190-48a6-b409-7eff3832492e" />
-<img width="1728" height="961" alt="뉴스" src="https://github.com/user-attachments/assets/2eb91965-fa28-4499-a8c5-033bec69f583" />
-<img width="1728" height="961" alt="일일 오픈 마켓" src="https://github.com/user-attachments/assets/47edf97d-035d-413e-9d35-2faa6d522260" />
+<img width="1728" height="961" alt="메인 템플릿" src="https://github.com/user-attachments/assets/2380c33c-51b7-4a50-ae57-262786dbd619" />
+<img width="1728" height="961" alt="주식 주문" src="https://github.com/user-attachments/assets/1a52989c-817a-4851-b2a4-b5b4ec0fce4f" />
+<img width="1728" height="961" alt="AI 종목 추천" src="https://github.com/user-attachments/assets/7916ed1a-d1f7-4511-ac11-dd7c19284acf" />
+<img width="1728" height="961" alt="주가 5일 예측" src="https://github.com/user-attachments/assets/c08f3d2c-4ca9-4253-b8f4-32fe0643191f" />
+<img width="1728" height="961" alt="뉴스" src="https://github.com/user-attachments/assets/0be7abff-543f-4795-acc2-b509eb0f4cf1" />
+<img width="1728" height="961" alt="일일 오픈 마켓" src="https://github.com/user-attachments/assets/be466411-359e-404c-b941-2b33ffed2795" />
 
 ---
 
