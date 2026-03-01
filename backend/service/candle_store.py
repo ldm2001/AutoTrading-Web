@@ -1,4 +1,4 @@
-# 분봉 캔들 빌더 + 파일 적재 — 틱 -> 15분/60분봉 조립 및 parquet 저장
+# 분봉 캔들 빌더 + 파일 적재 — 틱 -> 15분/60분봉 조립 및 CSV 저장
 import asyncio
 import datetime
 import logging

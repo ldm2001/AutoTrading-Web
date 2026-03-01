@@ -5,7 +5,7 @@
 	let loading = $state(false);
 
 	$effect(() => {
-		if (!$dailyReport) {
+		if ($dailyReport === null) {
 			loading = true;
 			fetchDailyReport().finally(() => loading = false);
 		}

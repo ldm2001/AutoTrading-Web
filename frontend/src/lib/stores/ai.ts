@@ -3,7 +3,7 @@ import type { AISignal, NewsSentiment } from '$lib/types';
 
 export const aiSignal = writable<AISignal | null>(null);
 export const newsSentiment = writable<NewsSentiment | null>(null);
-export const dailyReport = writable<string>('');
+export const dailyReport = writable<string | null>(null);
 export const aiLoading = writable<boolean>(false);
 
 export async function fetchAISignal(code: string) {
@@ -19,11 +19,13 @@ export async function fetchAISignal(code: string) {
 			if (indResp.ok) {
 				const indicators = await indResp.json();
 				aiSignal.set({
+					code,
+					name: '',
 					signal: 'hold',
 					confidence: 0,
 					reasons: ['AI 분석 불가 (지표만 표시)'],
 					indicators,
-					sentiment_score: 0,
+					news_count: 0,
 				});
 			} else {
 				aiSignal.set(null);

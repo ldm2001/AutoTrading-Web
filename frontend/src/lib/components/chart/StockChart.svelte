@@ -23,18 +23,18 @@
 
 	const stockInfo = $derived($stockMap.get($selectedStock));
 
-	const latestCandle = $derived(() => {
+	const latestCandle = $derived.by(() => {
 		const c = $dailyCandles;
 		return c.length > 0 ? c[c.length - 1] : null;
 	});
 
-	const highestPrice = $derived(() => {
+	const highestPrice = $derived.by(() => {
 		const c = $dailyCandles;
 		if (c.length === 0) return 0;
 		return Math.max(...c.map(x => x.high));
 	});
 
-	const lowestPrice = $derived(() => {
+	const lowestPrice = $derived.by(() => {
 		const c = $dailyCandles;
 		if (c.length === 0) return 0;
 		return Math.min(...c.map(x => x.low));
@@ -69,7 +69,7 @@
 
 		// 주가 라인 - 상승/하락 per-point 색상
 		mainSeries = chart.addSeries(LineSeries, {
-			lineWidth: 2.5,
+			lineWidth: 3,
 			lineType: 2,
 			crosshairMarkerVisible: true,
 			crosshairMarkerRadius: 4,
@@ -153,7 +153,7 @@
 		});
 
 		mainSeries = chart.addSeries(LineSeries, {
-			lineWidth: 2.5,
+			lineWidth: 3,
 			lineType: 2,
 		});
 
@@ -230,19 +230,19 @@
 	<div bind:this={container} class="chart-container"></div>
 
 	<!-- 기업 상세 정보 -->
-	{#if stockInfo && latestCandle()}
+	{#if stockInfo && latestCandle}
 		<div class="stock-details">
 			<div class="detail-item">
 				<span class="detail-label">시가</span>
-				<span class="detail-value">{latestCandle()!.open.toLocaleString()}</span>
+				<span class="detail-value">{latestCandle!.open.toLocaleString()}</span>
 			</div>
 			<div class="detail-item">
 				<span class="detail-label">최고</span>
-				<span class="detail-value up">{latestCandle()!.high.toLocaleString()}</span>
+				<span class="detail-value up">{latestCandle!.high.toLocaleString()}</span>
 			</div>
 			<div class="detail-item">
 				<span class="detail-label">최저</span>
-				<span class="detail-value down">{latestCandle()!.low.toLocaleString()}</span>
+				<span class="detail-value down">{latestCandle!.low.toLocaleString()}</span>
 			</div>
 			<div class="detail-item">
 				<span class="detail-label">시가총액</span>
@@ -254,11 +254,11 @@
 			</div>
 			<div class="detail-item">
 				<span class="detail-label">기간 최고</span>
-				<span class="detail-value up">{highestPrice().toLocaleString()}</span>
+				<span class="detail-value up">{highestPrice.toLocaleString()}</span>
 			</div>
 			<div class="detail-item">
 				<span class="detail-label">기간 최저</span>
-				<span class="detail-value down">{lowestPrice().toLocaleString()}</span>
+				<span class="detail-value down">{lowestPrice.toLocaleString()}</span>
 			</div>
 		</div>
 	{/if}

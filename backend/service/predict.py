@@ -263,7 +263,7 @@ class Predictor:
         if symbol in self._cache and now - self._cache_time.get(symbol, 0) < self._CACHE_TTL:
             logger.info(f"캐시 사용: {symbol}")
             return self._cache[symbol]
-        loop   = asyncio.get_event_loop()
+        loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(self._executor, self._run, symbol)
         self._cache[symbol]      = result
         self._cache_time[symbol] = now

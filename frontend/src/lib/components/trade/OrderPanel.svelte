@@ -247,7 +247,7 @@
 					<!-- 수익 계산 -->
 					{#if price > 0}
 						<div class="of-calc">
-							<div class="of-calc-title">수익를 계산 <span class="of-calc-fee-label">(수수료 포함)</span></div>
+							<div class="of-calc-title">수익률 계산 <span class="of-calc-fee-label">(수수료 포함)</span></div>
 							<div class="of-calc-row">
 								<span class="of-calc-label">목표가</span>
 								<span class="of-calc-val">{fmt(targetPrice)}</span>
