@@ -67,7 +67,10 @@ class TickQueue:
         q = self._ensure_queue()
         try:
             while self._running:
-                tick = await asyncio.wait_for(q.get(), timeout=5.0)
+                try:
+                    tick = await asyncio.wait_for(q.get(), timeout=5.0)
+                except TimeoutError:
+                    continue
                 code = tick["code"]
                 price = tick["price"]
                 volume = tick["volume"]
