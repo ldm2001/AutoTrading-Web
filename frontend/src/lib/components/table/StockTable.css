@@ -57,8 +57,33 @@
 	justify-content: space-between;
 }
 
+.ai-title-wrap {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	min-width: 0;
+}
+
 .ai-title {
 	color: #7c3aed;
+}
+
+.recommend-stage-badge {
+	font-size: 0.5625rem;
+	font-weight: 700;
+	padding: 0.0625rem 0.3125rem;
+	border-radius: 999px;
+	letter-spacing: 0.02em;
+}
+
+.recommend-stage-badge.pending {
+	color: #92400e;
+	background: rgba(245, 158, 11, 0.16);
+}
+
+.recommend-stage-badge.done {
+	color: #166534;
+	background: rgba(34, 197, 94, 0.14);
 }
 
 .refresh-btn {

@@ -9,8 +9,8 @@ from config import settings
 from service.kis import kis
 from service.discord import notify
 from service.strategy import evaluate, stop_loss
-from service.candle_store import store as candle_store
 from service.tick_queue import tick_q
+from service.watchlist import symbols as watchlist_symbols
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +62,13 @@ class Bot:
         self._task = asyncio.create_task(self._run())
         await self._msg("=== 자동매매 시작 ===")
 
-    # 봇 중지 — 캔들 flush + 틱큐 정지 후 종료
+    # 봇 중지 — 전역 시세 파이프라인은 유지하고 봇 루프만 종료
     async def stop(self) -> None:
         self.running = False
         if self._task:
             self._task.cancel()
             self._task = None
-        saved = await candle_store.flush()
-        await tick_q.stop()
-        await self._msg(f"=== 자동매매 종료 (캔들 {saved}건 저장) ===")
+        await self._msg("=== 자동매매 종료 ===")
 
     # 현재 봇 상태 반환 (실행 여부, 보유 종목, 오늘 거래 내역)
     def status(self) -> dict:
@@ -257,8 +255,7 @@ class Bot:
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
                         last_eval_min = now.minute
-                        from api.trade import symbols
-                        scan_list = symbols()
+                        scan_list = watchlist_symbols()
                         for sym in scan_list:
                             if len(self.bought) >= settings.target_buy_count:
                                 break

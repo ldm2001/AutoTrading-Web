@@ -9,7 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
 from service import kis, bot, load_all_stocks
+from service.market_feed import market_feed
 from service.sector import load_sectors
+from service.tick_queue import tick_q
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +28,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting KIS API")
     await kis.start()
     logger.info("KIS API ready")
+    await tick_q.start()
 
     bot.on_message = manager.message
     bot.on_trade = manager.trade
@@ -34,8 +37,14 @@ async def lifespan(app: FastAPI):
     yield
 
     task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     if bot.running:
         await bot.stop()
+    await market_feed.flush_day()
+    await tick_q.stop()
     await kis.stop()
     logger.info("Shutdown complete")
 

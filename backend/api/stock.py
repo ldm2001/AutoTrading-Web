@@ -11,15 +11,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/stocks")
 
 # AI 추천 캐시
-_recommend_cache: dict[str, tuple[float, list]] = {}
-_RECOMMEND_TTL = 600
+_STAGE1_TTL = 60
+_STAGE2_TTL = 600
+_stage1_cache: tuple[float, dict] | None = None
+_stage2_cache: tuple[float, list[dict]] | None = None
 _enhancing = False # 2단계 진행 중 플래그
+_generation = 0
 
 # ETF 제외 개별 종목 (추천 스캔 대상)
 _SCAN_CODES = [
     code for code, name in NAMES.items()
     if not any(tag in name for tag in ["KODEX", "TIGER", "ETF"])
 ]
+
+
+def _cache_get(entry):
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if time.time() < expires_at:
+        return value
+    return None
+
+
+def _prediction_summary(current_price: int, pred: dict | None) -> dict | None:
+    if not pred:
+        return None
+    preds = pred.get("predictions", [])
+    if not preds:
+        return None
+    predicted_5d = preds[-1]["close"]
+    change_pct = round((predicted_5d - current_price) / current_price * 100, 2) if current_price else 0
+    return {
+        "current_price": current_price,
+        "predicted_5d": predicted_5d,
+        "change_pct": change_pct,
+        "trend": "상승" if change_pct > 1 else ("하락" if change_pct < -1 else "보합"),
+    }
+
+
+def _recommend_response(items: list[dict], *, stage: str, enhancing: bool) -> dict:
+    return {
+        "items": items,
+        "stage": stage,
+        "enhancing": enhancing,
+    }
 
 # 전체 상장사 목록
 @router.get("")
@@ -60,8 +96,8 @@ async def find(query: str):
         raise HTTPException(502, f"Stock not found: {e}")
 
 # 2단계 백그라운드 — Transformer 예측으로 캐시 갱신
-async def _enhance_bg(candidates: list[dict]) -> None:
-    global _enhancing
+async def _enhance_bg(candidates: list[dict], generation: int) -> None:
+    global _enhancing, _stage2_cache
     if _enhancing:
         return
     _enhancing = True
@@ -73,24 +109,13 @@ async def _enhance_bg(candidates: list[dict]) -> None:
                 code = item["code"]
                 try:
                     pred  = await predict_stock(code)
-                    preds = pred.get("predictions", [])
-                    if not preds:
-                        item["prediction"] = None
-                        return item
-                    current_price = item["price"]
-                    predicted_5d  = preds[-1]["close"]
-                    change_pct    = round((predicted_5d - current_price) / current_price * 100, 2) if current_price else 0
-                    item["prediction"] = {
-                        "current_price": current_price,
-                        "predicted_5d":  predicted_5d,
-                        "change_pct":    change_pct,
-                        "trend":         "상승" if change_pct > 1 else ("하락" if change_pct < -1 else "보합"),
-                    }
-                    result          = await evaluate(code, prediction=pred)
+                    result = await evaluate(code, prediction=pred, fast=False)
+                    item["prediction"] = _prediction_summary(result["price"], pred)
                     item["score"]   = result["score"]
                     item["signal"]  = result["signal"]
                     item["summary"] = result["summary"]
                     item["factors"] = result["factors"]
+                    item["price"]   = result["price"]
                 except Exception as e:
                     logger.warning(f"Prediction failed for {code}: {e}")
                     item["prediction"] = None
@@ -99,7 +124,8 @@ async def _enhance_bg(candidates: list[dict]) -> None:
         enhanced = await asyncio.gather(*[_pred(c) for c in candidates])
         enhanced.sort(key=lambda x: x["score"], reverse=True)
         top10 = list(enhanced)[:10]
-        _recommend_cache["recommend"] = (time.time() + _RECOMMEND_TTL, top10)
+        if generation == _generation:
+            _stage2_cache = (time.time() + _STAGE2_TTL, top10)
         logger.info(f"Recommend enhanced with predictions ({len(top10)} stocks)")
     except Exception as e:
         logger.error(f"Enhance background failed: {e}")
@@ -109,9 +135,25 @@ async def _enhance_bg(candidates: list[dict]) -> None:
 # AI 멀티팩터 + Transformer 2단계 추천
 @router.get("/recommend")
 async def recommend():
-    cached = _recommend_cache.get("recommend")
-    if cached and time.time() < cached[0]:
-        return cached[1]
+    global _stage1_cache, _stage2_cache, _generation
+
+    enhanced = _cache_get(_stage2_cache)
+    if enhanced is not None:
+        return _recommend_response(enhanced, stage="enhanced", enhancing=False)
+
+    stage1 = _cache_get(_stage1_cache)
+    if stage1 is not None:
+        should_enhance = bool(stage1["candidates"]) and not _enhancing
+        if should_enhance:
+            asyncio.create_task(_enhance_bg(
+                [dict(item) for item in stage1["candidates"]],
+                stage1["generation"],
+            ))
+        return _recommend_response(
+            stage1["items"],
+            stage="screened",
+            enhancing=_enhancing or should_enhance,
+        )
 
     sem = asyncio.Semaphore(10)
 
@@ -122,19 +164,6 @@ async def recommend():
             try:
                 cached_pred = predictor.cached(code)
                 result = await evaluate(code, prediction=cached_pred, fast=True)
-                prediction = None
-                if cached_pred:
-                    preds = cached_pred.get("predictions", [])
-                    if preds:
-                        current_price = result["price"]
-                        predicted_5d = preds[-1]["close"]
-                        change_pct = round((predicted_5d - current_price) / current_price * 100, 2) if current_price else 0
-                        prediction = {
-                            "current_price": current_price,
-                            "predicted_5d":  predicted_5d,
-                            "change_pct":    change_pct,
-                            "trend":         "상승" if change_pct > 1 else ("하락" if change_pct < -1 else "보합"),
-                        }
                 return {
                     "code":       code,
                     "name":       NAMES.get(code, code),
@@ -143,7 +172,7 @@ async def recommend():
                     "price":      result["price"],
                     "summary":    result["summary"],
                     "factors":    result["factors"],
-                    "prediction": prediction,
+                    "prediction": _prediction_summary(result["price"], cached_pred),
                 }
             except Exception as e:
                 logger.debug(f"Recommend eval skip {code}: {e}")
@@ -156,13 +185,20 @@ async def recommend():
     top10 = valid[:10]
 
     # 1단계 결과 즉시 캐시 (짧은 TTL)
-    _recommend_cache["recommend"] = (time.time() + _RECOMMEND_TTL, top10)
+    _generation += 1
+    _stage2_cache = None
+    _stage1_cache = (time.time() + _STAGE1_TTL, {
+        "generation": _generation,
+        "items": top10,
+        "candidates": [dict(item) for item in valid[:20]],
+    })
 
     # 2단계: 백그라운드로 Transformer 예측 보강 (상위 20개)
     candidates = [dict(item) for item in valid[:20]]
-    asyncio.create_task(_enhance_bg(candidates))
+    if candidates:
+        asyncio.create_task(_enhance_bg(candidates, _generation))
 
-    return top10
+    return _recommend_response(top10, stage="screened", enhancing=bool(candidates))
 
 @router.get("/{code}/orderbook")
 async def orderbook(code: str):

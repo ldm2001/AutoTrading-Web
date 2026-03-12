@@ -1,55 +1,31 @@
 # 매매/봇/워치리스트 API 라우터
-import json
-from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from schema import OrderRequest
 from service import kis, bot
+from service.watchlist import load as load_watchlist, save as save_watchlist, symbols as watchlist_symbols
 
 router = APIRouter(prefix="/api/trading")
 
-# 워치리스트 파일 경로
-_WATCHLIST_FILE = Path(__file__).resolve().parent.parent / "watchlist.json"
-
-
-# 워치리스트 파일 읽기
-def _load() -> list[str]:
-    if _WATCHLIST_FILE.exists():
-        try:
-            return json.loads(_WATCHLIST_FILE.read_text())
-        except Exception:
-            pass
-    from config import settings
-    return list(settings.symbol_list)
-
-
-# 워치리스트 파일 저장
-def _save(codes: list[str]) -> None:
-    _WATCHLIST_FILE.write_text(json.dumps(codes, ensure_ascii=False))
-
-
 # 봇 스캔 대상 종목 목록
 def symbols() -> list[str]:
-    return _load()
+    return watchlist_symbols()
 
 
 class WatchlistBody(BaseModel):
     codes: list[str]
 
-
 # 워치리스트 조회
 @router.get("/watchlist")
 async def watchlist():
-    return {"codes": _load()}
-
+    return {"codes": load_watchlist()}
 
 # 워치리스트 수정
 @router.put("/watchlist")
 async def edit_watchlist(body: WatchlistBody):
     codes = [c.strip() for c in body.codes if c.strip()]
-    _save(codes)
+    save_watchlist(codes)
     return {"codes": codes, "count": len(codes)}
-
 
 # 보유 종목 + 평가금액 + 예수금 조회
 @router.get("/portfolio")
@@ -65,7 +41,6 @@ async def portfolio():
     except Exception as e:
         raise HTTPException(502, f"KIS API error: {e}")
 
-
 # 주문 가능 예수금 조회
 @router.get("/balance")
 async def balance():
@@ -73,7 +48,6 @@ async def balance():
         return {"cash": await kis.cash()}
     except Exception as e:
         raise HTTPException(502, f"KIS API error: {e}")
-
 
 # 자동매매 봇 시작
 @router.post("/bot/start")
@@ -83,7 +57,6 @@ async def start():
     await bot.start()
     return {"status": "started"}
 
-
 # 자동매매 봇 중지
 @router.post("/bot/stop")
 async def stop():
@@ -92,12 +65,10 @@ async def stop():
     await bot.stop()
     return {"status": "stopped"}
 
-
 # 봇 실행 상태 + 보유 종목 + 오늘 거래 내역
 @router.get("/bot/status")
 async def status():
     return bot.status()
-
 
 # 시장가 매수 주문
 @router.post("/buy")
@@ -107,7 +78,6 @@ async def buy(order: OrderRequest):
     except Exception as e:
         raise HTTPException(502, f"Buy failed: {e}")
 
-
 # 시장가 매도 주문
 @router.post("/sell")
 async def sell(order: OrderRequest):
@@ -115,7 +85,6 @@ async def sell(order: OrderRequest):
         return await kis.sell(order.code, order.qty)
     except Exception as e:
         raise HTTPException(502, f"Sell failed: {e}")
-
 
 # 섹터별 포트폴리오 히트맵 데이터
 @router.get("/portfolio/heatmap")
@@ -158,7 +127,6 @@ async def portfolio_heatmap():
         return result
     except Exception as e:
         raise HTTPException(502, f"KIS API error: {e}")
-
 
 # 거래 내역 조회 (날짜별, 기본=오늘)
 @router.get("/history")

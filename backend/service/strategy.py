@@ -29,6 +29,11 @@ _cache: dict[str, tuple[float, dict]] = {}
 _TTL   = 120
 
 class Scorer:
+    def _cache_key(self, code: str, *, fast: bool, prediction: dict | None) -> str | None:
+        if prediction is not None:
+            return None
+        mode = "fast" if fast else "full"
+        return f"{mode}:{code}"
 
     # RSI 점수화 (-25 ~ +25)
     def _rsi(self, val: float | None) -> tuple[float, str]:
@@ -167,8 +172,9 @@ class Scorer:
     # 종목 종합 평가 (멀티팩터 + 15분봉 FVG 앙상블)
     # fast=True: 1단계 스크리닝용 (15분봉 스킵 → API 호출 2건으로 축소)
     async def evaluate(self, code: str, prediction: dict | None = None, fast: bool = False) -> dict:
-        if prediction is None and not fast:
-            cached = _cache.get(code)
+        cache_key = self._cache_key(code, fast=fast, prediction=prediction)
+        if cache_key is not None:
+            cached = _cache.get(cache_key)
             if cached and time.time() < cached[0]:
                 return cached[1]
         try:
@@ -176,15 +182,13 @@ class Scorer:
                 candles, price_info = await asyncio.gather(
                     kis.daily(code), kis.price(code),
                 )
-                candles_15m = []
+                candles_15m = None
             else:
                 candles, price_info, candles_15m = await asyncio.gather(
                     kis.daily(code), kis.price(code), kis.candles_15m(code),
                 )
             current_price = price_info["price"]
             ind = indicators.summary(candles)
-
-            smc_candles = candles_15m if candles_15m else candles
 
             rsi_s,    rsi_r    = self._rsi(ind["rsi"])
             macd_s,   macd_r   = self._macd(ind["macd"])
@@ -193,8 +197,16 @@ class Scorer:
             pred_s,   pred_r   = self._pred(prediction, current_price)
             fvg_s,    fvg_r    = self._fvg(candles, current_price)
             ob_s,     ob_r     = self._ob(candles, current_price)
-            fvg15_s,  fvg15_r  = self._fvg_15m(smc_candles, current_price)
-            str_s,    str_r    = self._struct(smc_candles)
+
+            if fast:
+                fvg15_s, fvg15_r = 0.0, "1단계 스크리닝에서 제외"
+                str_s, str_r = 0.0, "1단계 스크리닝에서 제외"
+            elif candles_15m:
+                fvg15_s, fvg15_r = self._fvg_15m(candles_15m, current_price)
+                str_s, str_r = self._struct(candles_15m)
+            else:
+                fvg15_s, fvg15_r = 0.0, "15분봉 데이터 부족"
+                str_s, str_r = 0.0, "15분봉 데이터 부족"
 
             total = (rsi_s + macd_s + bb_s + vol_s + pred_s
                      + fvg_s + ob_s + fvg15_s + str_s)
@@ -211,8 +223,12 @@ class Scorer:
                 {"name": "Structure",  "score": round(str_s,   1), "max": W_STRUCT,  "reason": str_r},
             ]
 
-            # 동적 손절가 계산 (15분봉 FVG 하단 기반)
-            stop_price = smc.structural_stop(smc_candles, float(current_price))
+            # 동적 손절가는 full 평가 + 실제 15분봉 데이터가 있을 때만 계산
+            stop_price = (
+                smc.structural_stop(candles_15m, float(current_price))
+                if candles_15m
+                else None
+            )
 
             if total >= BUY_THRESHOLD:
                 signal  = "buy"
@@ -233,8 +249,8 @@ class Scorer:
                 "stop_price": stop_price,
             }
 
-            if prediction is None:
-                _cache[code] = (time.time() + _TTL, result)
+            if cache_key is not None:
+                _cache[cache_key] = (time.time() + _TTL, result)
             return result
 
         except Exception as e:

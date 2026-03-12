@@ -413,8 +413,12 @@ class KIS:
         return candles
 
     # 관심 종목 전체 현재가 병렬 조회
-    async def prices(self) -> list[dict]:
-        tasks = [self.price(code) for code in settings.symbol_list]
+    async def prices(self, codes: list[str] | None = None) -> list[dict]:
+        source = codes or settings.symbol_list
+        uniq_codes = [code.zfill(6) for code in dict.fromkeys(source) if code]
+        if not uniq_codes:
+            return []
+        tasks = [self.price(code) for code in uniq_codes]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return [r for r in results if not isinstance(r, Exception)]
 

@@ -127,6 +127,14 @@ export interface RecommendStock {
 	prediction?: RecommendPrediction | null;
 }
 
+export type RecommendStage = 'screened' | 'enhanced';
+
+export interface RecommendResponse {
+	items: RecommendStock[];
+	stage: RecommendStage;
+	enhancing: boolean;
+}
+
 export interface OrderLevel {
 	price: number;
 	volume: number;
