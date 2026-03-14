@@ -76,6 +76,50 @@ class Indicators:
             "current_price": float(closes[-1]),
         }
 
+    # ATR (Average True Range) — 변동성 지표
+    def atr(self, candles: list[dict], period: int = 14) -> float | None:
+        if len(candles) < period + 1:
+            return None
+        highs  = np.array([c["high"]  for c in candles], dtype=np.float64)
+        lows   = np.array([c["low"]   for c in candles], dtype=np.float64)
+        closes = np.array([c["close"] for c in candles], dtype=np.float64)
+        tr = np.maximum(
+            highs[1:] - lows[1:],
+            np.maximum(
+                np.abs(highs[1:] - closes[:-1]),
+                np.abs(lows[1:] - closes[:-1]),
+            ),
+        )
+        atr_val = tr[-period:].mean()
+        return round(float(atr_val), 2)
+
+    # 변동성 종합 분석
+    def volatility(self, candles: list[dict]) -> dict:
+        closes = self._arr(candles)
+        result: dict = {"atr": self.atr(candles), "atr_pct": None, "bb_width": None, "daily_range_pct": None, "volatility_grade": "N/A"}
+        if len(closes) < 2:
+            return result
+        price = float(closes[-1])
+        if result["atr"] and price > 0:
+            result["atr_pct"] = round(result["atr"] / price * 100, 2)
+        bb = self.bollinger(candles)
+        if bb and price > 0:
+            result["bb_width"] = round((bb["upper"] - bb["lower"]) / bb["middle"] * 100, 2)
+        highs = np.array([c["high"] for c in candles[-20:]], dtype=np.float64)
+        lows  = np.array([c["low"]  for c in candles[-20:]], dtype=np.float64)
+        avg_range = float(((highs - lows) / closes[-20:]).mean() * 100)
+        result["daily_range_pct"] = round(avg_range, 2)
+        atr_pct = result["atr_pct"] or 0
+        if atr_pct >= 4:
+            result["volatility_grade"] = "매우높음"
+        elif atr_pct >= 2.5:
+            result["volatility_grade"] = "높음"
+        elif atr_pct >= 1.5:
+            result["volatility_grade"] = "보통"
+        else:
+            result["volatility_grade"] = "낮음"
+        return result
+
     # 전체 기술 지표 요약
     def summary(self, candles: list[dict]) -> dict:
         return {
@@ -89,7 +133,9 @@ class Indicators:
 
 # 모듈 레벨 인스턴스
 _ind      = Indicators()
-rsi       = _ind.rsi
-macd      = _ind.macd
-bollinger = _ind.bollinger
-summary   = _ind.summary
+rsi        = _ind.rsi
+macd       = _ind.macd
+bollinger  = _ind.bollinger
+atr        = _ind.atr
+volatility = _ind.volatility
+summary    = _ind.summary

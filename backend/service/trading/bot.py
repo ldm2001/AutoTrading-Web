@@ -58,6 +58,14 @@ class Bot:
             "is_running": self.running,
             "bought_list": list(self.bought.keys()),
             "today_trades": self.logs,
+            "watch_count": len(self.scan()),
+            "plan": {
+                "target_buy_count": settings.target_buy_count,
+                "buy_percent": settings.buy_percent,
+                "stop_loss_pct": settings.stop_loss_pct,
+                "take_profit_pct": settings.take_profit_pct,
+                "buy_score_threshold": settings.buy_score_threshold,
+            },
         }
 
     # 로그 출력 + Discord 알림 + WebSocket 메시지 전송

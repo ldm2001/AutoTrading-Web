@@ -11,6 +11,35 @@
 	import type { DailyCandle } from '$lib/types';
 	import './StockChart.css';
 
+	interface VolData {
+		atr_pct: number | null;
+		bb_width: number | null;
+		volatility_grade: string;
+		rsi: number | null;
+		daily_range_pct: number | null;
+	}
+
+	let volData = $state<VolData | null>(null);
+
+	let lastVolCode = '';
+	$effect(() => {
+		const code = $selectedStock;
+		if (!code) { volData = null; lastVolCode = ''; return; }
+		if (code === lastVolCode) return;
+		lastVolCode = code;
+		fetch(`/api/stocks/${code}/volatility`)
+			.then(r => r.ok ? r.json() : null)
+			.then(d => { if (d) volData = d; })
+			.catch(() => {});
+	});
+
+	const gradeColor = (g: string) => {
+		if (g === '매우높음') return '#dc2626';
+		if (g === '높음') return '#ea580c';
+		if (g === '보통') return '#d97706';
+		return '#059669';
+	};
+
 	const UP_COLOR = '#ef4444';   // 상승 - 빨강
 	const DOWN_COLOR = '#2563eb'; // 하락 - 파랑
 	const FLAT_COLOR = '#9ca3af'; // 보합
@@ -200,15 +229,18 @@
 			<span class="chart-subtitle">{$selectedStock} | 일봉 차트</span>
 		</div>
 
-		<div class="chart-legend">
-			<span class="legend-item">
-				<span class="legend-seg up"></span><span class="legend-seg down"></span>
-				상승/하락
-			</span>
-			<span class="legend-item"><span class="legend-bar"></span>거래량</span>
-			{#if $prediction && $prediction.code === $selectedStock}
-				<span class="legend-item"><span class="legend-line green"></span>AI 예측</span>
-			{/if}
+		<div class="chart-side">
+			<div class="chart-legend">
+				<span class="legend-item">
+					<span class="legend-seg up"></span><span class="legend-seg down"></span>
+					상승/하락
+				</span>
+				<span class="legend-item"><span class="legend-bar"></span>거래량</span>
+				{#if $prediction && $prediction.code === $selectedStock}
+					<span class="legend-item"><span class="legend-line green"></span>AI 예측</span>
+				{/if}
+			</div>
+
 		</div>
 
 		{#if stockInfo}
@@ -261,5 +293,34 @@
 				<span class="detail-value down">{lowestPrice.toLocaleString()}</span>
 			</div>
 		</div>
+
+		{#if volData}
+			<div class="stock-details vol-row">
+				<div class="detail-item">
+					<span class="detail-label">변동성</span>
+					<span class="detail-value" style="color: {gradeColor(volData.volatility_grade)}; font-weight:700">
+						{volData.volatility_grade}
+					</span>
+				</div>
+				<div class="detail-item">
+					<span class="detail-label">ATR%</span>
+					<span class="detail-value">{volData.atr_pct != null ? `${volData.atr_pct}%` : '-'}</span>
+				</div>
+				<div class="detail-item">
+					<span class="detail-label">BB폭</span>
+					<span class="detail-value">{volData.bb_width != null ? `${volData.bb_width}%` : '-'}</span>
+				</div>
+				<div class="detail-item">
+					<span class="detail-label">일중변동</span>
+					<span class="detail-value">{volData.daily_range_pct != null ? `${volData.daily_range_pct}%` : '-'}</span>
+				</div>
+				<div class="detail-item">
+					<span class="detail-label">RSI</span>
+					<span class="detail-value" class:up={volData.rsi != null && volData.rsi >= 70} class:down={volData.rsi != null && volData.rsi <= 30}>
+						{volData.rsi ?? '-'}
+					</span>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>

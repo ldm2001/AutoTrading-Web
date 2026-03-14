@@ -231,6 +231,44 @@ async def recommend():
 
     return pack(stage1["items"], stage="screened", enhancing=busy(_stage2_job))
 
+# 업종별 등락 흐름
+@router.get("/sector/flow")
+async def sector_flow():
+    from service.market.sector import sector_of
+    try:
+        codes = list(NAMES.keys())[:80]
+        sem = asyncio.Semaphore(15)
+
+        async def fetch(code: str):
+            async with sem:
+                try:
+                    p = await kis.price(code)
+                    return {"code": code, "name": NAMES.get(code, code), "sector": sector_of(code), "change_pct": p.get("change_percent", 0), "price": p.get("price", 0)}
+                except Exception:
+                    return None
+
+        results = await asyncio.gather(*[fetch(c) for c in codes])
+        valid = [r for r in results if r]
+
+        sectors: dict[str, dict] = {}
+        for item in valid:
+            s = item["sector"]
+            if s not in sectors:
+                sectors[s] = {"sector": s, "stocks": [], "total_change": 0, "count": 0}
+            sectors[s]["stocks"].append({"name": item["name"], "change_pct": item["change_pct"]})
+            sectors[s]["total_change"] += item["change_pct"]
+            sectors[s]["count"] += 1
+
+        result = []
+        for s in sectors.values():
+            avg = round(s["total_change"] / s["count"], 2) if s["count"] else 0
+            s["stocks"].sort(key=lambda x: x["change_pct"], reverse=True)
+            result.append({"sector": s["sector"], "avg_change_pct": avg, "stock_count": s["count"], "top_stocks": s["stocks"][:3], "bottom_stocks": s["stocks"][-2:]})
+        result.sort(key=lambda x: x["avg_change_pct"], reverse=True)
+        return result
+    except Exception as e:
+        raise HTTPException(502, f"Sector flow error: {e}")
+
 @router.get("/{code}/orderbook")
 async def orderbook(code: str):
     try:
@@ -249,5 +287,23 @@ async def price(code: str):
 async def daily(code: str, count: int = 60):
     try:
         return await kis.daily(code, count)
+    except Exception as e:
+        raise HTTPException(502, f"KIS API error: {e}")
+
+# 변동성 분석 (ATR, BB 폭, 일중 변동폭)
+@router.get("/{code}/volatility")
+async def stock_volatility(code: str):
+    from service.market.indicators import volatility, rsi, bollinger
+    try:
+        candles = await kis.daily(code, 60)
+        vol = volatility(candles)
+        vol["rsi"] = rsi(candles)
+        bb = bollinger(candles)
+        if bb:
+            price = bb["current_price"]
+            bb_pos = round((price - bb["lower"]) / (bb["upper"] - bb["lower"]) * 100, 1) if bb["upper"] != bb["lower"] else 50
+            vol["bb_position"] = bb_pos
+            vol["bb"] = bb
+        return vol
     except Exception as e:
         raise HTTPException(502, f"KIS API error: {e}")

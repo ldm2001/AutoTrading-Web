@@ -18,7 +18,14 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	gap: 0.75rem;
 	margin-bottom: 0.5rem;
+}
+
+.chart-side {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
 }
 
 .chart-title {
@@ -102,6 +109,23 @@
 	border-radius: 1px;
 }
 
+.chart-tool {
+	padding: 0.3125rem 0.5rem;
+	border: 1px solid rgba(180, 83, 9, 0.18);
+	border-radius: 0.3125rem;
+	background: rgba(180, 83, 9, 0.04);
+	color: #b45309;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.chart-tool:hover {
+	background: rgba(180, 83, 9, 0.08);
+	border-color: rgba(180, 83, 9, 0.28);
+}
+
 /* Stock Details - Google Finance style */
 .stock-details {
 	display: grid;
@@ -138,4 +162,15 @@
 
 .detail-value.down {
 	color: #3b82f6;
+}
+
+@media (max-width: 860px) {
+	.chart-header {
+		flex-wrap: wrap;
+	}
+
+	.chart-side {
+		width: 100%;
+		justify-content: space-between;
+	}
 }

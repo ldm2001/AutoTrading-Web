@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { tradingStatus, consoleMessages } from '$lib/stores/trading';
+	import { selectedStock, stockMap } from '$lib/stores/stocks';
+	import { tradingStatus, consoleMessages, watchCodes, stopBot } from '$lib/stores/trading';
 	import './TradeConsole.css';
 
 	let consoleEl: HTMLDivElement;
 	let tradesOpen = $state(false);
+	let stopping = $state(false);
 
 	$effect(() => {
 		if ($consoleMessages.length && consoleEl) {
@@ -12,14 +14,49 @@
 	});
 
 	const tradeCount = $derived($tradingStatus.today_trades.length);
+	const stockInfo = $derived($stockMap.get($selectedStock));
+	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
+	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
+
+	async function emergencyStop() {
+		if (!$tradingStatus.is_running || stopping) return;
+		stopping = true;
+		await stopBot();
+		stopping = false;
+	}
 </script>
 
 <div class="console-wrap">
 	<div class="console-header">
 		<span class="console-title">Console</span>
-		<span class="console-status" class:running={$tradingStatus.is_running}>
-			{$tradingStatus.is_running ? 'LIVE' : 'IDLE'}
-		</span>
+		<div class="console-head-right">
+			<span class="console-status" class:running={$tradingStatus.is_running}>
+				{$tradingStatus.is_running ? 'LIVE' : 'IDLE'}
+			</span>
+			<button
+				class="console-stop"
+				type="button"
+				onclick={emergencyStop}
+				disabled={!$tradingStatus.is_running || stopping}
+			>
+				{stopping ? '정지중' : '전체 긴급정지'}
+			</button>
+		</div>
+	</div>
+
+	<div class="console-bar">
+		<div class="console-tags">
+			<span class="console-tag strategy">멀티팩터</span>
+			<span class="console-tag" class:auto={autoOn} class:live={autoLive}>
+				{stockInfo?.name ?? '선택 종목'} · {autoLive ? '자동매매 중' : autoOn ? '자동대기' : '수동'}
+			</span>
+			{#if $tradingStatus.plan}
+				<span class="console-tag">종목당 {($tradingStatus.plan.buy_percent * 100).toFixed(0)}%</span>
+				<span class="console-tag">손절 {$tradingStatus.plan.stop_loss_pct}%</span>
+				<span class="console-tag">익절 +{$tradingStatus.plan.take_profit_pct}%</span>
+				<span class="console-tag">스캔 {$tradingStatus.watch_count ?? 0}개</span>
+			{/if}
+		</div>
 	</div>
 
 	<div bind:this={consoleEl} class="console-log">

@@ -11,6 +11,7 @@
 		recommendRefreshing,
 		fetchRecommendations
 	} from '$lib/stores/recommend';
+	import { tradingStatus, watchCodes } from '$lib/stores/trading';
 	import type { RecommendStock } from '$lib/types';
 	import Modal from '$lib/components/modal/Modal.svelte';
 	import './StockTable.css';
@@ -21,6 +22,7 @@
 	let showSuggestions = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout>;
 	let recModal = $state<RecommendStock | null>(null);
+	const autoSet = $derived.by(() => new Set($watchCodes));
 
 	const filteredStocks = $derived.by(() => {
 		const q = searchInput.trim().toLowerCase();
@@ -165,7 +167,12 @@
 					class:selected={$selectedStock === stock.code}
 					onclick={() => select(stock.code)}
 				>
-					<span class="stock-name">{stock.name}</span>
+					<div class="stock-main">
+						<span class="stock-name">{stock.name}</span>
+						{#if autoSet.has(stock.code)}
+							<span class="stock-auto" class:live={$tradingStatus.is_running} class:off={!$tradingStatus.is_running}>AUTO</span>
+						{/if}
+					</div>
 					<span class="stock-market-tag">{stock.market}</span>
 				</button>
 			{/each}

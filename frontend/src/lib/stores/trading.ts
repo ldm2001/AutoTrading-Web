@@ -1,13 +1,16 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { TradingStatus, SectorCell } from '$lib/types';
 
 export const tradingStatus = writable<TradingStatus>({
 	is_running: false,
 	bought_list: [],
-	today_trades: []
+	today_trades: [],
+	watch_count: 0
 });
 
 export const consoleMessages = writable<string[]>([]);
+export const watchCodes = writable<string[]>([]);
+export const watchBusy = writable(false);
 
 export function addConsoleMessage(msg: string) {
 	consoleMessages.update((msgs) => [...msgs.slice(-200), msg]);
@@ -16,6 +19,13 @@ export function addConsoleMessage(msg: string) {
 export async function fetchTradingStatus() {
 	const resp = await fetch('/api/trading/bot/status');
 	if (resp.ok) tradingStatus.set(await resp.json());
+}
+
+export async function fetchWatchlist() {
+	const resp = await fetch('/api/trading/watchlist');
+	if (!resp.ok) return;
+	const body = await resp.json();
+	watchCodes.set(body.codes ?? []);
 }
 
 export async function startBot() {
@@ -28,6 +38,29 @@ export async function stopBot() {
 	const resp = await fetch('/api/trading/bot/stop', { method: 'POST' });
 	if (resp.ok) await fetchTradingStatus();
 	return resp.ok;
+}
+
+export async function flipWatchlist(code: string) {
+	const codes = get(watchCodes);
+	const next = codes.includes(code)
+		? codes.filter((item) => item !== code)
+		: [...codes, code];
+
+	watchBusy.set(true);
+	try {
+		const resp = await fetch('/api/trading/watchlist', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ codes: next })
+		});
+		if (!resp.ok) return { ok: false, active: codes.includes(code) };
+		const body = await resp.json();
+		watchCodes.set(body.codes ?? next);
+		await fetchTradingStatus();
+		return { ok: true, active: (body.codes ?? next).includes(code) };
+	} finally {
+		watchBusy.set(false);
+	}
 }
 
 // 섹터 히트맵 스토어

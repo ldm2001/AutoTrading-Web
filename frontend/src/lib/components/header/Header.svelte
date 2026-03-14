@@ -3,6 +3,8 @@
 	import { tradingStatus, startBot, stopBot } from '$lib/stores/trading';
 	import './Header.css';
 
+	let { onmenu }: { onmenu?: () => void } = $props();
+
 	let now = $state(new Date());
 	let switching = $state(false);
 
@@ -56,9 +58,16 @@
 			<span class="toggle-track">
 				<span class="toggle-thumb"></span>
 			</span>
-			<span class="toggle-label">
-				{$tradingStatus.is_running ? 'ON' : 'OFF'}
+			<span class="toggle-copy">
+				<span class="toggle-meta">전체 자동매매</span>
+				<span class="toggle-label">{$tradingStatus.is_running ? 'ON' : 'OFF'}</span>
 			</span>
+		</button>
+
+		<button class="menu-btn" type="button" onclick={onmenu} aria-label="메뉴 열기">
+			<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+				<path d="M3 4.5h12M3 9h12M3 13.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+			</svg>
 		</button>
 	</div>
 </header>

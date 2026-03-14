@@ -280,6 +280,14 @@
 	align-items: center;
 }
 
+.stock-main {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	min-width: 0;
+	flex: 1;
+}
+
 .stock-name {
 	font-size: 0.6875rem;
 	font-weight: 600;
@@ -288,6 +296,27 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	flex: 1;
+}
+
+.stock-auto {
+	padding: 0.0625rem 0.25rem;
+	border-radius: 999px;
+	background: rgba(37, 99, 235, 0.1);
+	color: #2563eb;
+	font-size: 0.5rem;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	flex-shrink: 0;
+}
+
+.stock-auto.off {
+	background: #f3f4f6;
+	color: #9ca3af;
+}
+
+.stock-auto.live {
+	background: rgba(16, 185, 129, 0.14);
+	color: #047857;
 }
 
 .stock-market-tag {

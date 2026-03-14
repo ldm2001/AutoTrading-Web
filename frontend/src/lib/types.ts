@@ -41,6 +41,14 @@ export interface TradingStatus {
 	is_running: boolean;
 	bought_list: string[];
 	today_trades: TradeLog[];
+	watch_count?: number;
+	plan?: {
+		target_buy_count: number;
+		buy_percent: number;
+		stop_loss_pct: number;
+		take_profit_pct: number;
+		buy_score_threshold: number;
+	};
 }
 
 export interface PriceUpdate {
