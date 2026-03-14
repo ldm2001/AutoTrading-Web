@@ -6,8 +6,8 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from service.backtest import BacktestConfig, run
-from service.candle_store import store
+from service.trading.backtest import BacktestConfig, run
+from service.market.candle_store import store
 
 logger = logging.getLogger(__name__)
 

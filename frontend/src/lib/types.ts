@@ -127,12 +127,10 @@ export interface RecommendStock {
 	prediction?: RecommendPrediction | null;
 }
 
-export type RecommendStage = 'screened' | 'enhanced';
-
 export interface RecommendResponse {
 	items: RecommendStock[];
-	stage: RecommendStage;
-	enhancing: boolean;
+	loading: boolean;
+	refreshing: boolean;
 }
 
 export interface OrderLevel {

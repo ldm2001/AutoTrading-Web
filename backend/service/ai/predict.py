@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
+from service.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,7 @@ class StockTransformer(nn.Module):
 class Predictor:
 
     def __init__(self):
-        self._cache:      dict[str, dict]  = {}
-        self._cache_time: dict[str, float] = {}
+        self._cache       = TTLCache()
         self._executor    = ThreadPoolExecutor(max_workers=2)
         self._CACHE_TTL   = 3600  # 1시간
 
@@ -251,22 +251,18 @@ class Predictor:
 
     # 캐시된 예측 조회 (없으면 None)
     def cached(self, symbol: str) -> dict | None:
-        symbol = symbol.zfill(6)
-        if symbol in self._cache and time.time() - self._cache_time.get(symbol, 0) < self._CACHE_TTL:
-            return self._cache[symbol]
-        return None
+        return self._cache.get(symbol.zfill(6))
 
     # 비동기 예측 진입점 (캐시 포함)
     async def predict(self, symbol: str) -> dict:
         symbol = symbol.zfill(6)
-        now    = time.time()
-        if symbol in self._cache and now - self._cache_time.get(symbol, 0) < self._CACHE_TTL:
+        cached = self._cache.get(symbol)
+        if cached is not None:
             logger.info(f"캐시 사용: {symbol}")
-            return self._cache[symbol]
+            return cached
         loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(self._executor, self._run, symbol)
-        self._cache[symbol]      = result
-        self._cache_time[symbol] = now
+        self._cache.set(symbol, result, self._CACHE_TTL)
         return result
 
 # 모듈 레벨 인스턴스

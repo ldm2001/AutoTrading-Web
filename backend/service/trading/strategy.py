@@ -1,11 +1,17 @@
 # 멀티팩터 매매 전략 스코어러
+from __future__ import annotations
+
 import asyncio
 import logging
-import time
 
-from service.kis import kis
-from service import indicators
-from service import smc
+from typing import TYPE_CHECKING
+
+from service.market import indicators
+from service.market import smc
+from service.ttl_cache import TTLCache
+
+if TYPE_CHECKING:
+    from service.kis import KIS
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +31,20 @@ BUY_THRESHOLD  = 55
 SELL_THRESHOLD = -40
 
 # 평가 캐시
-_cache: dict[str, tuple[float, dict]] = {}
+_cache = TTLCache()
 _TTL   = 120
 
 class Scorer:
+    def __init__(self, broker: KIS | None = None) -> None:
+        self._broker = broker
+
+    @property
+    def broker(self) -> KIS:
+        if self._broker is None:
+            from service.kis import kis
+            self._broker = kis
+        return self._broker
+
     def _cache_key(self, code: str, *, fast: bool, prediction: dict | None) -> str | None:
         if prediction is not None:
             return None
@@ -175,17 +191,18 @@ class Scorer:
         cache_key = self._cache_key(code, fast=fast, prediction=prediction)
         if cache_key is not None:
             cached = _cache.get(cache_key)
-            if cached and time.time() < cached[0]:
-                return cached[1]
+            if cached is not None:
+                return cached
         try:
+            b = self.broker
             if fast:
                 candles, price_info = await asyncio.gather(
-                    kis.daily(code), kis.price(code),
+                    b.daily(code), b.price(code),
                 )
                 candles_15m = None
             else:
                 candles, price_info, candles_15m = await asyncio.gather(
-                    kis.daily(code), kis.price(code), kis.candles_15m(code),
+                    b.daily(code), b.price(code), b.candles_15m(code),
                 )
             current_price = price_info["price"]
             ind = indicators.summary(candles)
@@ -250,7 +267,7 @@ class Scorer:
             }
 
             if cache_key is not None:
-                _cache[cache_key] = (time.time() + _TTL, result)
+                _cache.set(cache_key, result, _TTL)
             return result
 
         except Exception as e:
@@ -271,7 +288,7 @@ class Scorer:
         fallback_pct: float = -3.0,
     ) -> tuple[bool, float]:
         try:
-            current = await kis.price_raw(code)
+            current = await self.broker.price_raw(code)
             pnl = (current - avg_price) / avg_price * 100
 
             # 구조적 손절가가 있으면 그 가격 하회 시 손절

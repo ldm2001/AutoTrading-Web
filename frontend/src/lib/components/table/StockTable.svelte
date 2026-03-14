@@ -8,8 +8,7 @@
 	import {
 		recommendations,
 		recommendLoading,
-		recommendEnhancing,
-		recommendStage,
+		recommendRefreshing,
 		fetchRecommendations
 	} from '$lib/stores/recommend';
 	import type { RecommendStock } from '$lib/types';
@@ -187,10 +186,8 @@
 		<div class="watchlist-header ai-header">
 			<div class="ai-title-wrap">
 					<span class="watchlist-title ai-title">AI 추천</span>
-					{#if $recommendEnhancing}
+					{#if $recommendRefreshing}
 						<span class="recommend-stage-badge pending">예측 계산중</span>
-					{:else if $recommendations.length > 0 && $recommendStage === 'enhanced'}
-						<span class="recommend-stage-badge done">예측 반영</span>
 					{/if}
 				</div>
 			<button class="refresh-btn" onclick={() => fetchRecommendations()} disabled={$recommendLoading}>

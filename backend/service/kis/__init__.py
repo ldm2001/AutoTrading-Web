@@ -1,9 +1,12 @@
-from service.kis_auth import Auth
-from service.kis_market import Market
-from service.kis_trade import Trade
-from service.stock_universe import ALL_STOCKS, CODES, INDICES, NAMES, load_all_stocks, search
+from service.kis.auth import Auth
+from service.kis.market import Market
+from service.kis.trade import Trade
+from service.kis.ws import KISWS
+from service.trading.order_log import append as order_log_append
+from service.policy import Policy
+from service.market.price_sync import price_sync
+from service.market.stock_universe import ALL_STOCKS, CODES, INDICES, NAMES, listing, search
 from service.ttl_cache import TTLCache
-
 
 # 분리된 KIS 기능을 묶는 facade
 class KIS:
@@ -18,9 +21,11 @@ class KIS:
 
     def __init__(self) -> None:
         self.cache = TTLCache()
-        self.auth = Auth()
-        self.market = Market(self.auth, self.cache)
-        self.trade = Trade(self.auth, self.cache)
+        self.policy = Policy()
+        self.auth = Auth(self.policy)
+        self.market = Market(self.auth, self.cache, self.policy)
+        self.trade = Trade(self.auth, self.cache, self.policy, audit=order_log_append)
+        self.ws = KISWS(self.auth, price_sync)
 
     # KIS 세션 오픈
     async def start(self) -> None:
@@ -81,5 +86,25 @@ class KIS:
     # 시장가 매도를 요청
     async def sell(self, code: str, qty: int) -> dict:
         return await self.trade.sell(code, qty)
+
+    # 실시간 체결 구독을 맞춤
+    async def ws_sync(self, codes: list[str]) -> None:
+        await self.ws.sync(codes)
+
+    # 실시간 체결 연결을 닫음
+    async def ws_close(self) -> None:
+        await self.ws.close()
+
+    # 실시간 최신 시세를 seed 한다
+    def ws_seed(self, items: list[dict]) -> None:
+        self.ws.seed(items)
+
+    # 실시간 최신 시세 목록을 반환
+    def ws_rows(self, codes: list[str] | None = None) -> list[dict]:
+        return self.ws.rows(codes)
+
+    # 실시간 수신 상태를 반환
+    def ws_live(self) -> bool:
+        return self.ws.live()
 
 kis = KIS()

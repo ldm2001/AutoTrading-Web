@@ -1,8 +1,8 @@
 # AI 분석 API 라우터
 from fastapi import APIRouter, HTTPException
-from service.ai_pipeline import pipeline
+from service.ai.pipeline import pipeline
+from service.market.indicators import summary
 from service.kis import kis
-from service import indicators
 
 router = APIRouter(prefix="/api/ai")
 
@@ -41,6 +41,6 @@ async def report():
 async def ind(code: str):
     try:
         candles = await kis.daily(code)
-        return indicators.summary(candles)
+        return summary(candles)
     except Exception as e:
         raise HTTPException(502, f"기술 지표 계산 실패: {e}")

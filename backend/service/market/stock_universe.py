@@ -107,7 +107,7 @@ INDICES: dict[str, tuple[str, str]] = {
 }
 
 # 전체 상장 종목 메타 적재
-def load_all_stocks() -> None:
+def listing() -> None:
     try:
         import FinanceDataReader as fdr
 

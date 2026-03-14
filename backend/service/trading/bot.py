@@ -1,49 +1,31 @@
 # 멀티팩터 자동매매 봇 — 매수/손절/익절/장마감 청산 루프
 import asyncio
 import datetime
-import json
 import logging
-from pathlib import Path
 from collections.abc import Callable
 from config import settings
-from service.kis import kis
 from service.discord import notify
-from service.strategy import evaluate, stop_loss
-from service.tick_queue import tick_q
-from service.watchlist import symbols as watchlist_symbols
+from service.kis import KIS, NAMES, kis
+from service.trading.order_log import append as order_log_append, rows as order_log_rows
+from service.trading.strategy import evaluate, stop_loss
+from service.market.tick_queue import TickQueue, tick_q
+from service.trading.watchlist import symbols as watchlist_symbols
 
 logger = logging.getLogger(__name__)
 
-# 거래 내역 저장 디렉터리
-_TRADES_DIR = Path(__file__).resolve().parent.parent / "trades"
-_TRADES_DIR.mkdir(exist_ok=True)
-
-# 날짜별 거래 내역 파일 경로 반환
-def _trades_file(date: str | None = None) -> Path:
-    if date is None:
-        date = datetime.date.today().isoformat()
-    return _TRADES_DIR / f"{date}.json"
-
-# 날짜별 거래 내역 로드 (없으면 빈 리스트)
-def _load_trades(date: str | None = None) -> list[dict]:
-    f = _trades_file(date)
-    if f.exists():
-        try:
-            return json.loads(f.read_text())
-        except Exception:
-            pass
-    return []
-
-# 거래 내역 파일에 단건 추가 저장
-def _save_trade(entry: dict) -> None:
-    today = datetime.date.today().isoformat()
-    trades = _load_trades(today)
-    trades.append(entry)
-    _trades_file(today).write_text(json.dumps(trades, ensure_ascii=False, indent=2))
-
 class Bot:
     # 봇 상태 초기화 — running/bought/logs/콜백 세팅
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        broker: KIS,
+        queue: TickQueue,
+        names: dict[str, str],
+        scan: Callable[[], list[str]],
+    ) -> None:
+        self.broker = broker
+        self.queue = queue
+        self.names = names
+        self.scan = scan
         self.running: bool = False
         self.bought: dict[str, dict] = {} # {"avg_price": int, "qty": int, "name": str}
         self.logs: list[dict] = []
@@ -57,8 +39,8 @@ class Bot:
             return
         self.running = True
         self.bought = {}
-        self.logs = _load_trades()
-        await tick_q.start()
+        self.logs = order_log_rows()
+        await self.queue.start()
         self._task = asyncio.create_task(self._run())
         await self._msg("=== 자동매매 시작 ===")
 
@@ -102,7 +84,7 @@ class Bot:
             "message": "성공" if ok else "실패",
         }
         self.logs.append(entry)
-        _save_trade(entry)  # 파일 영구 저장
+        order_log_append(entry)
         action = "매수" if kind == "buy" else "매도"
         await self._msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
         if self.on_trade:
@@ -123,8 +105,8 @@ class Bot:
                     await self._msg(
                         f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
                     )
-                    result = await kis.sell(code, info["qty"])
-                    cp = await kis.price_raw(code)
+                    result = await self.broker.sell(code, info["qty"])
+                    cp = await self.broker.price_raw(code)
                     await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         del self.bought[code]
@@ -135,8 +117,8 @@ class Bot:
                     await self._msg(
                         f"[익절] {info['name']}({code}) 수익률 +{pnl:.2f}% ≥ +{settings.take_profit_pct}%"
                     )
-                    result = await kis.sell(code, info["qty"])
-                    cp = await kis.price_raw(code)
+                    result = await self.broker.sell(code, info["qty"])
+                    cp = await self.broker.price_raw(code)
                     await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         del self.bought[code]
@@ -151,7 +133,7 @@ class Bot:
             prediction = None
             if settings.use_prediction:
                 try:
-                    from service.predict import predict_stock
+                    from service.ai.predict import predict_stock
                     prediction = await predict_stock(sym)
                 except Exception:
                     pass
@@ -180,10 +162,9 @@ class Bot:
             if sp:
                 await self._msg(f"  → 구조적 손절가: {sp:,.0f}원")
 
-            order = await kis.buy(sym, qty)
+            order = await self.broker.buy(sym, qty)
             if order["success"]:
-                from service.kis import NAMES
-                name = NAMES.get(sym, sym)
+                name = self.names.get(sym, sym)
                 self.bought[sym] = {
                     "avg_price": cp, "qty": qty, "name": name,
                     "stop_price": sp,
@@ -196,8 +177,8 @@ class Bot:
     # 메인 루프 
     async def _run(self) -> None:
         try:
-            total_cash = await kis.cash()
-            items, evaluation = await kis.holdings()
+            total_cash = await self.broker.cash()
+            items, evaluation = await self.broker.holdings()
 
             # 기존 보유 종목 등록
             for code, info in items.items():
@@ -255,7 +236,7 @@ class Bot:
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
                         last_eval_min = now.minute
-                        scan_list = watchlist_symbols()
+                        scan_list = self.scan()
                         for sym in scan_list:
                             if len(self.bought) >= settings.target_buy_count:
                                 break
@@ -266,14 +247,14 @@ class Bot:
 
                     # 30분마다 잔고 갱신
                     if now.minute % 30 == 0 and now.second < 10:
-                        items, _ = await kis.holdings()
+                        items, _ = await self.broker.holdings()
 
                 # 장 마감 전 일괄 매도
                 if t_sell < now < t_exit and not soldout:
                     await self._msg("[장마감] 보유 종목 일괄 매도")
-                    items, _ = await kis.holdings()
+                    items, _ = await self.broker.holdings()
                     for code, info in items.items():
-                        result = await kis.sell(code, info["qty"])
+                        result = await self.broker.sell(code, info["qty"])
                         cp = info.get("current_price", 0)
                         await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
                     soldout = True
@@ -293,4 +274,4 @@ class Bot:
         finally:
             self.running = False
 
-bot = Bot()
+bot = Bot(kis, tick_q, NAMES, watchlist_symbols)

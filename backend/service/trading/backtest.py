@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from service import indicators, smc
-from service.strategy import Scorer, BUY_THRESHOLD
+from service.market import indicators, smc
+from service.trading.strategy import Scorer, BUY_THRESHOLD
 
 logger = logging.getLogger(__name__)
 

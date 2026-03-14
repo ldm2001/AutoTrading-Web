@@ -4,8 +4,8 @@ import datetime
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from config import settings
-from service import kis
-from service.market_feed import market_feed
+from service.kis import kis
+from service.market.price_sync import price_sync
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,6 +55,11 @@ def _market_open(now: datetime.datetime) -> bool:
     mins = now.hour * 60 + now.minute
     return now.weekday() < 5 and 9 * 60 <= mins < 15 * 60 + 35
 
+
+def _full(codes: list[str], stocks: list[dict]) -> bool:
+    want = len(dict.fromkeys(code.zfill(6) for code in codes if code))
+    return len(stocks) >= want
+
 @router.websocket("/ws/prices")
 async def prices(websocket: WebSocket):
     await manager.attach_price(websocket)
@@ -90,11 +95,26 @@ async def loop():
             stocks: list[dict] = []
 
             if market_open and codes:
-                stocks = await kis.prices(codes)
-                await market_feed.ingest_snapshot(stocks, now)
-                active_session_date = now.date().isoformat()
+                await kis.ws_sync(codes)
+                stocks = kis.ws_rows(codes)
+                live = kis.ws_live()
+                if not live or not _full(codes, stocks):
+                    snap = await kis.prices(codes)
+                    kis.ws_seed(snap)
+                    stocks = kis.ws_rows(codes) or snap
+                    if not live:
+                        await price_sync.snap(snap, now)
+                if stocks:
+                    active_session_date = now.date().isoformat()
             elif manager.price_clients and codes:
-                stocks = await kis.prices(codes)
+                await kis.ws_close()
+                stocks = kis.ws_rows(codes)
+                if not _full(codes, stocks):
+                    snap = await kis.prices(codes)
+                    kis.ws_seed(snap)
+                    stocks = kis.ws_rows(codes) or snap
+            else:
+                await kis.ws_close()
 
             if manager.price_clients:
                 idx    = await kis.indices()
@@ -105,7 +125,7 @@ async def loop():
                 })
 
             if not market_open and active_session_date:
-                await market_feed.flush_day(active_session_date)
+                await price_sync.flush_day(active_session_date)
                 active_session_date = None
         except Exception as e:
             logger.error(f"Price loop error: {e}")

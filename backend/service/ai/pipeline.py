@@ -1,22 +1,22 @@
 # AI 분석 파이프라인 오케스트레이터
 import asyncio
 import logging
-import time
 
 from datetime import date
 from service.kis import kis, NAMES, ALL_STOCKS
-from service.gemini import gemini
-from service import news
-from service import indicators
+from service.ai.gemini import gemini
+from service.ai import news
+from service.market import indicators
+from service.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
 # analyze 결과 캐시 (3분 TTL)
-_analyze_cache: dict[str, tuple[float, dict]] = {}
+_analyze_cache = TTLCache()
 _ANALYZE_TTL = 180
 
 # sentiment 결과 캐시 (5분 TTL)
-_sentiment_cache: dict[str, tuple[float, dict]] = {}
+_sentiment_cache = TTLCache()
 _SENTIMENT_TTL = 300
 
 # 한국 공휴일 2026 (음력 변동분 수동 갱신)
@@ -55,8 +55,8 @@ class AIPipeline:
     # 종목 종합 분석 (기술 지표 + 뉴스 + AI 시그널)
     async def analyze(self, code: str) -> dict | None:
         cached = _analyze_cache.get(code)
-        if cached and time.time() < cached[0]:
-            return cached[1]
+        if cached is not None:
+            return cached
         try:
             stock_name = _name(code)
             # daily + news + price 병렬 요청
@@ -81,7 +81,7 @@ class AIPipeline:
                     "reasons":    ["Gemini API 미설정" if not gemini.enabled else "AI 분석 실패"],
                 }),
             }
-            _analyze_cache[code] = (time.time() + _ANALYZE_TTL, result)
+            _analyze_cache.set(code, result, _ANALYZE_TTL)
             return result
         except Exception as e:
             logger.error(f"AI analyze failed for {code}: {e}")
@@ -90,8 +90,8 @@ class AIPipeline:
     # 뉴스 감성 분석
     async def sentiment(self, code: str) -> dict | None:
         cached = _sentiment_cache.get(code)
-        if cached and time.time() < cached[0]:
-            return cached[1]
+        if cached is not None:
+            return cached
         try:
             stock_name = _name(code)
             stock_news = await news.fetch_news(code, count=10)
@@ -99,7 +99,7 @@ class AIPipeline:
                 gemini_result = await gemini.analyze_sentiment(stock_news, stock_name)
                 if gemini_result:
                     result = {"code": code, "name": stock_name, **gemini_result}
-                    _sentiment_cache[code] = (time.time() + _SENTIMENT_TTL, result)
+                    _sentiment_cache.set(code, result, _SENTIMENT_TTL)
                     return result
             # Gemini 미설정 → 뉴스 제목만 반환
             result = {
@@ -112,7 +112,7 @@ class AIPipeline:
                     for n in stock_news
                 ],
             }
-            _sentiment_cache[code] = (time.time() + _SENTIMENT_TTL, result)
+            _sentiment_cache.set(code, result, _SENTIMENT_TTL)
             return result
         except Exception as e:
             logger.error(f"Sentiment analysis failed for {code}: {e}")
@@ -123,7 +123,7 @@ class AIPipeline:
         if not gemini.enabled:
             return None
         try:
-            from service.bot import bot
+            from service.trading.bot import bot
             status = bot.status()
             trades = status.get("today_trades", [])
             items, evaluation = await kis.holdings()

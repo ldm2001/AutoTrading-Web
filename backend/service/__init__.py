@@ -1,2 +1,3 @@
-from service.kis import kis, NAMES, CODES, INDICES, ALL_STOCKS, load_all_stocks, search
-from service.bot import bot
+# service 패키지 — 하위 호환 re-exports
+from service.kis import kis, KIS, NAMES, CODES, INDICES, ALL_STOCKS, listing, search
+from service.trading.bot import bot

@@ -4,14 +4,19 @@ import time
 import httpx
 from config import settings
 
+from service.policy import Policy
+
 logger = logging.getLogger(__name__)
 
 # 토큰과 공통 헤더를 관리
 class Auth:
-    def __init__(self) -> None:
+    def __init__(self, policy: Policy | None = None) -> None:
         self._client: httpx.AsyncClient | None = None
         self._token = ""
         self._exp = 0.0
+        self._approval = ""
+        self._approval_exp = 0.0
+        self._policy = policy or Policy()
 
     # HTTP 세션을 열고 토큰을 받음
     async def open(self) -> None:
@@ -26,24 +31,66 @@ class Auth:
         if self._client:
             await self._client.aclose()
             self._client = None
+        self._approval = ""
+        self._approval_exp = 0.0
 
     # 접근 토큰을 새로 받음
     async def refresh(self) -> None:
         client = self._client
         if client is None:
             raise RuntimeError("KIS client is not started")
-        resp = await client.post(
-            "/oauth2/tokenP",
-            json={
-                "grant_type": "client_credentials",
-                "appkey": settings.app_key,
-                "appsecret": settings.app_secret,
-            },
-        )
-        resp.raise_for_status()
-        self._token = resp.json()["access_token"]
+
+        async def slot() -> dict:
+            resp = await client.post(
+                "/oauth2/tokenP",
+                json={
+                    "grant_type": "client_credentials",
+                    "appkey": settings.app_key,
+                    "appsecret": settings.app_secret,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = await self._policy.safe("auth:token", slot, mark="auth", stale=False)
+        self._token = data["access_token"]
         self._exp = time.time() + 20 * 3600
         logger.info("Access token refreshed")
+
+    # 웹소켓 접속키를 발급
+    async def approval(self) -> str:
+        if self._approval and time.time() < self._approval_exp:
+            return self._approval
+
+        client = self._client
+        if client is None:
+            raise RuntimeError("KIS client is not started")
+
+        async def slot() -> dict:
+            resp = await client.post(
+                "/oauth2/Approval",
+                json={
+                    "grant_type": "client_credentials",
+                    "appkey": settings.app_key,
+                    "secretkey": settings.app_secret,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = await self._policy.safe("auth:approval", slot, mark="approval", stale=False)
+        self._approval = data["approval_key"]
+        self._approval_exp = time.time() + 23 * 3600
+        logger.info("Approval key refreshed")
+        return self._approval
+
+    # 웹소켓 접속 주소를 반환
+    def ws_url(self) -> str:
+        if settings.url_ws:
+            return settings.url_ws
+        if "openapivts" in settings.url_base:
+            return "ws://ops.koreainvestment.com:31000"
+        return "ws://ops.koreainvestment.com:21000"
 
     # 만료를 확인한 뒤 세션을 반환
     async def ready(self) -> httpx.AsyncClient:

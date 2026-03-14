@@ -8,10 +8,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
-from service import kis, bot, load_all_stocks
-from service.market_feed import market_feed
-from service.sector import load_sectors
-from service.tick_queue import tick_q
+from service.trading.bot import bot
+from service.kis import kis
+from service.market.price_sync import price_sync
+from service.market.sector import load_sectors
+from service.market.stock_universe import listing
+from service.market.tick_queue import tick_q
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Loading all stock listings")
-    load_all_stocks()
+    listing()
     load_sectors()
     logger.info("Starting KIS API")
     await kis.start()
@@ -43,7 +45,8 @@ async def lifespan(app: FastAPI):
         pass
     if bot.running:
         await bot.stop()
-    await market_feed.flush_day()
+    await price_sync.flush_day()
+    await kis.ws_close()
     await tick_q.stop()
     await kis.stop()
     logger.info("Shutdown complete")

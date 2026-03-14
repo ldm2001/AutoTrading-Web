@@ -4,10 +4,11 @@ import logging
 import time
 import httpx
 from bs4 import BeautifulSoup
+from service.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
-_cache: dict[str, tuple[float, list[dict]]] = {}
+_cache = TTLCache()
 _TTL = 300 # 5분
 _last_request: float = 0
 _REQUEST_INTERVAL = 1.0 # 요청 간격
@@ -18,8 +19,8 @@ async def fetch_news(code: str, count: int = 10) -> list[dict]:
 
     key = f"{code}:{count}"
     cached = _cache.get(key)
-    if cached and time.time() < cached[0]:
-        return cached[1]
+    if cached is not None:
+        return cached
 
     # 요청 간격 제한
     now = time.time()
@@ -83,5 +84,5 @@ async def fetch_news(code: str, count: int = 10) -> list[dict]:
         if len(articles) >= count:
             break
 
-    _cache[key] = (time.time() + _TTL, articles)
+    _cache.set(key, articles, _TTL)
     return articles

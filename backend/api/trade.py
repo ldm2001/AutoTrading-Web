@@ -2,15 +2,16 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from schema import OrderRequest
-from service import kis, bot
-from service.watchlist import load as load_watchlist, save as save_watchlist, symbols as watchlist_symbols
+from service.trading.bot import bot
+from service.kis import kis
+from service.trading.order_log import rows
+from service.trading.watchlist import load as load_watchlist, save as save_watchlist, symbols as watchlist_symbols
 
 router = APIRouter(prefix="/api/trading")
 
 # 봇 스캔 대상 종목 목록
 def symbols() -> list[str]:
     return watchlist_symbols()
-
 
 class WatchlistBody(BaseModel):
     codes: list[str]
@@ -88,8 +89,8 @@ async def sell(order: OrderRequest):
 
 # 섹터별 포트폴리오 히트맵 데이터
 @router.get("/portfolio/heatmap")
-async def portfolio_heatmap():
-    from service.sector import sector_of
+async def heatmap():
+    from service.market.sector import sector_of
     try:
         items, _ = await kis.holdings()
         item_list = list(items.values())
@@ -131,9 +132,9 @@ async def portfolio_heatmap():
 # 거래 내역 조회 (날짜별, 기본=오늘)
 @router.get("/history")
 async def history(date: str | None = None):
-    from service.bot import _load_trades
-    return {"date": date or "today", "trades": _load_trades(date)}
+    return {"date": date or "today", "trades": rows(date)}
 
-
-# 하위 호환 별칭
-get_bot_symbols = symbols
+# 주문 감사 로그 조회
+@router.get("/orders")
+async def orders(date: str | None = None):
+    return {"date": date or "today", "orders": rows(date)}

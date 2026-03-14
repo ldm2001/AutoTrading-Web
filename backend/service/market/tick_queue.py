@@ -3,7 +3,7 @@ import asyncio
 import logging
 import datetime
 from collections.abc import Callable
-from service.candle_store import store
+from service.market.candle_store import store
 
 logger = logging.getLogger(__name__)
 

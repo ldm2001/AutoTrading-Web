@@ -1,26 +1,13 @@
 # 제미나이 API 클라이언트
 import json
 import logging
-import time
-from typing import Any
 import google.generativeai as genai
 from config import settings
+from service.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
-# 응답 캐시 (key → (만료시각, 값))
-_cache: dict[str, tuple[float, Any]] = {}
-
-# 캐시 조회 — TTL 만료 시 None 반환
-def _cached(key: str, ttl: float) -> Any | None:
-    entry = _cache.get(key)
-    if entry and time.time() < entry[0]:
-        return entry[1]
-    return None
-
-# 캐시 저장
-def _set_cache(key: str, value: Any, ttl: float) -> None:
-    _cache[key] = (time.time() + ttl, value)
+_cache = TTLCache()
 
 class GeminiClient:
 
@@ -66,8 +53,8 @@ class GeminiClient:
         self, indicators: dict, news: list[dict], stock_info: dict
     ) -> dict | None:
         cache_key = f"signal:{stock_info.get('code', '')}"
-        cached = _cached(cache_key, 60)
-        if cached:
+        cached = _cache.get(cache_key)
+        if cached is not None:
             return cached
 
         prompt = f"""당신은 한국 주식 시장 전문 애널리스트입니다.
@@ -98,14 +85,14 @@ class GeminiClient:
 
         result = await self._generate_json(prompt)
         if result:
-            _set_cache(cache_key, result, 60)
+            _cache.set(cache_key, result, 60)
         return result
 
     # 뉴스 감성 분석 — 긍정/중립/부정 분류 + 전체 점수 반환 (5분 캐시)
     async def analyze_sentiment(self, news: list[dict], stock_name: str) -> dict | None:
         cache_key = f"sentiment:{stock_name}"
-        cached = _cached(cache_key, 300)
-        if cached:
+        cached = _cache.get(cache_key)
+        if cached is not None:
             return cached
 
         if not news:
@@ -135,7 +122,7 @@ class GeminiClient:
 
         result = await self._generate_json(prompt)
         if result:
-            _set_cache(cache_key, result, 300)
+            _cache.set(cache_key, result, 300)
         return result
 
     # 일일 마켓 리포트 마크다운 생성 (1시간 캐시)
@@ -144,8 +131,8 @@ class GeminiClient:
         *, today_str: str = "", market_open: bool = True
     ) -> str | None:
         cache_key = "daily_report"
-        cached = _cached(cache_key, 3600)
-        if cached:
+        cached = _cache.get(cache_key)
+        if cached is not None:
             return cached
 
         market_text = "\n".join(
@@ -198,7 +185,7 @@ class GeminiClient:
 
         result = await self._generate(prompt)
         if result:
-            _set_cache(cache_key, result, 3600)
+            _cache.set(cache_key, result, 3600)
         return result
 
 gemini = GeminiClient()

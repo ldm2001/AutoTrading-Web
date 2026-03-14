@@ -1,7 +1,7 @@
 # AI 예측 API 라우터
 from fastapi import APIRouter, HTTPException
 from service.kis import NAMES
-from service.predict import predict_stock
+from service.ai.predict import predict_stock
 
 router = APIRouter(prefix="/api/predict")
 

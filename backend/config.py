@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     acnt_prdt_cd: str = "01"
     discord_webhook_url: str = ""
     url_base: str = "https://openapi.koreainvestment.com:9443"
+    url_ws: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
