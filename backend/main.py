@@ -28,27 +28,36 @@ async def lifespan(app: FastAPI):
     listing()
     load_sectors()
     logger.info("Starting KIS API")
-    await kis.start()
-    logger.info("KIS API ready")
-    await tick_q.start()
+    kis_ok = False
+    try:
+        await kis.start()
+        kis_ok = True
+        logger.info("KIS API ready")
+    except Exception as e:
+        logger.warning("KIS API 인증 실패 (장외 시간 또는 키 문제) — 서버는 기동합니다: %s", e)
+
+    if kis_ok:
+        await tick_q.start()
 
     bot.on_message = manager.message
     bot.on_trade = manager.trade
 
-    task = asyncio.create_task(price_loop())
+    task = asyncio.create_task(price_loop()) if kis_ok else None
     yield
 
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     if bot.running:
         await bot.stop()
     await price_sync.flush_day()
-    await kis.ws_close()
-    await tick_q.stop()
-    await kis.stop()
+    if kis_ok:
+        await kis.ws_close()
+        await tick_q.stop()
+        await kis.stop()
     logger.info("Shutdown complete")
 
 app = FastAPI(title="KI AutoTrade API", version="2.0.0", lifespan=lifespan)

@@ -1,4 +1,7 @@
 import logging
+from pathlib import Path
+import requests
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -106,22 +109,108 @@ INDICES: dict[str, tuple[str, str]] = {
     "KPI100": ("2007", "코스피100"),
 }
 
+# 네이버 금융 API로 전체 종목 가져오기
+def _naver_listing() -> int:
+    count = 0
+    seen: set[str] = set()
+    page = 1
+    while page <= 30:
+        url = f"https://m.stock.naver.com/api/stocks/marketValue?market=KOSPI&page={page}&pageSize=100"
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if not resp.ok:
+            break
+        stocks = resp.json().get("stocks", [])
+        if not stocks:
+            break
+        for s in stocks:
+            code = s.get("itemCode", "")
+            name = s.get("stockName", "")
+            if not code or not name or code in seen:
+                continue
+            seen.add(code)
+            ALL_STOCKS[code] = {"name": name, "market": ""}
+            count += 1
+        page += 1
+
+    # 시장 구분: 네이버 개별 종목 API로 보정 (상위 종목만)
+    # 나머지는 빈 문자열 → 프론트에서 표시 안 함
+    _resolve_markets(list(ALL_STOCKS.keys()))
+    return count
+
+# 시장 구분 보정 — KRX로 시도 후 캐시 파일에 저장
+_MARKET_CACHE = Path(__file__).parent.parent / "trades" / "market_cache.json"
+
+def _resolve_markets(codes: list[str]) -> None:
+    # 1차: 캐시 파일에서 복원
+    if _MARKET_CACHE.exists():
+        try:
+            cached = json.loads(_MARKET_CACHE.read_text())
+            applied = 0
+            for code, label in cached.items():
+                if code in ALL_STOCKS:
+                    ALL_STOCKS[code]["market"] = label
+                    applied += 1
+            if applied > 100:
+                logger.info("Market labels restored from cache (%s)", applied)
+                return
+        except Exception:
+            pass
+
+    # 2차: KRX API 시도
+    try:
+        import requests
+        market_map: dict[str, str] = {}
+        for mkt_id, label in [("STK", "KOSPI"), ("KSQ", "KOSDAQ")]:
+            resp = requests.post(
+                "http://data.krx.co.kr/comm/bldAttend/getJsonData.cmd",
+                headers={"User-Agent": "Mozilla/5.0", "Referer": "http://data.krx.co.kr"},
+                data={"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": mkt_id, "share": "1", "csvxls_isNo": "false"},
+                timeout=10,
+            )
+            if not resp.ok:
+                continue
+            for row in resp.json().get("OutBlock_1", []):
+                code = row.get("ISU_SRT_CD", "")
+                if code:
+                    market_map[code] = label
+                    if code in ALL_STOCKS:
+                        ALL_STOCKS[code]["market"] = label
+        if market_map:
+            _MARKET_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            _MARKET_CACHE.write_text(json.dumps(market_map, ensure_ascii=False))
+            logger.info("Market labels resolved via KRX (%s), cached", len(market_map))
+    except Exception:
+        logger.info("KRX market resolve skipped (off-hours)")
+
 # 전체 상장 종목 메타 적재
 def listing() -> None:
+    # 1차: FDR
     try:
         import FinanceDataReader as fdr
-
         kospi = fdr.StockListing("KOSPI")[["Code", "Name"]]
         kosdaq = fdr.StockListing("KOSDAQ")[["Code", "Name"]]
         for _, row in kospi.iterrows():
             ALL_STOCKS[row["Code"]] = {"name": row["Name"], "market": "KOSPI"}
         for _, row in kosdaq.iterrows():
             ALL_STOCKS[row["Code"]] = {"name": row["Name"], "market": "KOSDAQ"}
-        logger.info("Loaded %s stocks (KOSPI+KOSDAQ)", len(ALL_STOCKS))
+        logger.info("Loaded %s stocks via FDR", len(ALL_STOCKS))
+        return
     except Exception as e:
-        logger.error("Failed to load stock listing: %s", e)
-        for code, name in NAMES.items():
-            ALL_STOCKS[code] = {"name": name, "market": "KOSPI"}
+        logger.warning("FDR listing failed: %s — trying Naver fallback", e)
+
+    # 2차: 네이버 금융
+    try:
+        count = _naver_listing()
+        if count > 0:
+            logger.info("Loaded %s stocks via Naver API", count)
+            return
+    except Exception as e:
+        logger.warning("Naver listing failed: %s", e)
+
+    # 3차: 하드코딩 폴백
+    for code, name in NAMES.items():
+        ALL_STOCKS[code] = {"name": name, "market": "KOSPI"}
+    logger.warning("Using hardcoded %s stocks as fallback", len(NAMES))
 
 # 코드와 이름으로 종목 검색
 def search(query: str) -> list[dict[str, str]]:
@@ -132,7 +221,21 @@ def search(query: str) -> list[dict[str, str]]:
         name = info["name"]
         aliases = ALIASES.get(code, [])
         if q in name.lower() or q in code or any(q in alias for alias in aliases):
-            result.append({"code": code, "name": name})
+            result.append({"code": code, "name": name, "market": info.get("market", "")})
         if len(result) >= 20:
             break
+
+    # 로컬 결과 없으면 네이버 자동완성으로 폴백
+    if not result:
+        try:
+            import requests
+            url = f"https://ac.stock.naver.com/ac?q={query.strip()}&target=stock"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            if resp.ok:
+                for item in resp.json().get("items", []):
+                    if item.get("nationCode") == "KOR":
+                        result.append({"code": item["code"], "name": item["name"], "market": item.get("typeName", "")})
+        except Exception:
+            pass
+
     return result
