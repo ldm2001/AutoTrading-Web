@@ -26,6 +26,9 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
+# Candle data
+backend/service/data/
+
 # Legacy
 config.yaml
 templates/

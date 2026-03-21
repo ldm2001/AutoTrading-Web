@@ -1,4 +1,4 @@
-# cd backend 
+# cd backend
 # uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 import asyncio
 import logging
@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
 from service.trading.bot import bot
 from service.kis import kis
@@ -14,11 +15,10 @@ from service.market.price_sync import price_sync
 from service.market.sector import load_sectors
 from service.market.stock_universe import listing
 from service.market.tick_queue import tick_q
+from service.event_bus import bus
+from service.logging import setup as setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # 앱 시작/종료 시 KIS 클라이언트 및 봇 라이프사이클 관리
@@ -39,6 +39,11 @@ async def lifespan(app: FastAPI):
     if kis_ok:
         await tick_q.start()
 
+    # 이벤트 버스 시작 (Redis Pub/Sub 연결)
+    if kis.cache.redis is not None:
+        bus.bind(kis.cache.redis)
+    await bus.start()
+
     bot.on_message = manager.message
     bot.on_trade = manager.trade
 
@@ -53,6 +58,7 @@ async def lifespan(app: FastAPI):
             pass
     if bot.running:
         await bot.stop()
+    await bus.stop()
     await price_sync.flush_day()
     if kis_ok:
         await kis.ws_close()
@@ -77,10 +83,17 @@ app.include_router(ai_router)
 app.include_router(predict_router)
 app.include_router(backtest_router)
 
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
 # 서버 상태 확인 (봇 실행 여부 포함)
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "trading_bot": bot.running}
+    return {
+        "status": "ok",
+        "trading_bot": bot.running,
+        "redis": kis.cache.redis is not None,
+        "kafka": tick_q.kafka_enabled,
+    }
 
 # 프로덕션: SvelteKit 빌드 정적 파일 서빙
 frontend_build = Path(__file__).parent.parent / "frontend" / "build"

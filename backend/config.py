@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     url_ws: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
+    redis_url: str = "redis://localhost:6379/0"
+    kafka_bootstrap: str = "localhost:9092"
+    kafka_tick_topic: str = "ticks"
+    elasticsearch_url: str = "http://localhost:9200"
 
     symbol_list: list[str] = ["005930", "373220", "035720", "000660"]
     target_buy_count: int = 3

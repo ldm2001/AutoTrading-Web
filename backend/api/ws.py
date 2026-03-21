@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from config import settings
 from service.kis import kis
 from service.market.price_sync import price_sync
+from service.metrics import ws_clients
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,11 +21,13 @@ class WS:
     async def attach_price(self, ws: WebSocket) -> None:
         await ws.accept()
         self.price_clients.add(ws)
+        ws_clients.labels(channel="price").set(len(self.price_clients))
 
     # 거래 채널 클라이언트 등록
     async def attach_trade(self, ws: WebSocket) -> None:
         await ws.accept()
         self.trade_clients.add(ws)
+        ws_clients.labels(channel="trade").set(len(self.trade_clients))
 
     # 연결된 클라이언트에 데이터 브로드캐스트
     async def _broadcast(self, clients: set[WebSocket], data: dict) -> None:
@@ -70,6 +73,7 @@ async def prices(websocket: WebSocket):
                 await websocket.send_text("pong")
     except (WebSocketDisconnect, Exception):
         manager.price_clients.discard(websocket)
+        ws_clients.labels(channel="price").set(len(manager.price_clients))
 
 
 @router.websocket("/ws/trades")
@@ -82,6 +86,7 @@ async def trades(websocket: WebSocket):
                 await websocket.send_text("pong")
     except (WebSocketDisconnect, Exception):
         manager.trade_clients.discard(websocket)
+        ws_clients.labels(channel="trade").set(len(manager.trade_clients))
 
 # 실시간 가격 브로드캐스트 루프 — 장 시간(09:00~15:35 평일) 3초, 장외 30초
 async def loop():

@@ -1,6 +1,7 @@
 # 멀티팩터 자동매매 봇 — 매수/손절/익절/장마감 청산 루프
 import asyncio
 import datetime
+import json
 import logging
 from collections.abc import Callable
 from config import settings
@@ -10,8 +11,11 @@ from service.trading.order_log import append as order_log_append, rows as order_
 from service.trading.strategy import evaluate, stop_loss
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
+from service.event_bus import bus
 
 logger = logging.getLogger(__name__)
+
+_REDIS_BOT_KEY = "bot:state"
 
 class Bot:
     # 봇 상태 초기화 — running/bought/logs/콜백 세팅
@@ -32,6 +36,31 @@ class Bot:
         self._task: asyncio.Task | None = None
         self.on_message: Callable | None = None
         self.on_trade: Callable | None = None
+        self._tick_event = asyncio.Event()
+        self._last_tick_code: str = ""
+
+    # Redis에 봇 보유 상태 저장
+    def _save_state(self) -> None:
+        r = self.broker.cache.redis
+        if r is None:
+            return
+        try:
+            r.set(_REDIS_BOT_KEY, json.dumps(self.bought, default=str))
+        except Exception as e:
+            logger.warning("Bot state save failed: %s", e)
+
+    # Redis에서 봇 보유 상태 복원
+    def _restore_state(self) -> None:
+        r = self.broker.cache.redis
+        if r is None:
+            return
+        try:
+            raw = r.get(_REDIS_BOT_KEY)
+            if raw:
+                self.bought = json.loads(raw)
+                logger.info("Bot state restored from Redis: %s positions", len(self.bought))
+        except Exception as e:
+            logger.warning("Bot state restore failed: %s", e)
 
     # 봇 시작 — 오늘 거래 내역 복원 후 루프 실행
     async def start(self) -> None:
@@ -39,8 +68,17 @@ class Bot:
             return
         self.running = True
         self.bought = {}
+        self._restore_state()
         self.logs = order_log_rows()
         await self.queue.start()
+
+        # 이벤트 버스 구독 — tick 이벤트로 보유종목 실시간 체크
+        def _on_tick(_event: str, data: dict) -> None:
+            if data and data.get("code") in self.bought:
+                self._last_tick_code = data["code"]
+                self._tick_event.set()
+        bus.on("tick", _on_tick)
+
         self._task = asyncio.create_task(self._run())
         await self._msg("=== 자동매매 시작 ===")
 
@@ -93,6 +131,7 @@ class Bot:
         }
         self.logs.append(entry)
         order_log_append(entry)
+        self._save_state()
         action = "매수" if kind == "buy" else "매도"
         await self._msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
         if self.on_trade:
@@ -272,7 +311,12 @@ class Bot:
                     await self._msg("프로그램을 종료합니다.")
                     break
 
-                await asyncio.sleep(5)
+                # 이벤트 드리븐: tick 이벤트 또는 5초 타임아웃
+                try:
+                    await asyncio.wait_for(self._tick_event.wait(), timeout=5.0)
+                    self._tick_event.clear()
+                except TimeoutError:
+                    pass
 
         except asyncio.CancelledError:
             logger.info("Bot cancelled")

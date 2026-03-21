@@ -19,7 +19,6 @@
 	import SectorFlowPanel from '$lib/components/market/SectorFlowPanel.svelte';
 	import Modal from '$lib/components/modal/Modal.svelte';
 	import { fly } from 'svelte/transition';
-	import { get } from 'svelte/store';
 	import { indices, initAllStocks, fetchIndices, selectedStock, selectedStockDetail, fetchStockPrice, updateStockPrices } from '$lib/stores/stocks';
 	import { tradingStatus, fetchTradingStatus, fetchWatchlist, flipWatchlist, watchCodes, watchBusy, addConsoleMessage } from '$lib/stores/trading';
 	import { priceWs, tradeWs } from '$lib/stores/websocket';
@@ -129,17 +128,10 @@
 			fetchTradingStatus();
 		});
 
-		// 선택 종목 가격 주기 갱신 — symbol_list 미포함 종목도 5초마다 최신가 유지
-		const priceTimer = setInterval(() => {
-			const code = get(selectedStock);
-			if (code) fetchStockPrice(code);
-		}, 5000);
-
-		return () => {
+			return () => {
 			offPrice(); offMsg(); offTrade();
 			priceWs.close();
 			tradeWs.close();
-			clearInterval(priceTimer);
 		};
 	});
 </script>

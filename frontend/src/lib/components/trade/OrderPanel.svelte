@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
 	import { tradingStatus, addConsoleMessage } from '$lib/stores/trading';
+	import { toastSuccess, toastError } from '$lib/stores/toast';
 	import type { OrderBook } from '$lib/types';
 	import './OrderPanel.css';
 
@@ -94,13 +95,16 @@
 			if (resp.ok && data.success) {
 				const label = tab === 'buy' ? '매수' : '매도';
 				result = { type: 'success', msg: `${label} 성공: ${stockInfo?.name ?? ''} ${qty}주` };
+				toastSuccess(`${label} 성공: ${stockInfo?.name ?? ''} ${qty}주`);
 				addConsoleMessage(`[수동 ${label}] ${stockInfo?.name ?? $selectedStock} ${qty}주`);
 				await loadCash();
 			} else {
 				result = { type: 'error', msg: data.detail || '주문 실패' };
+				toastError(data.detail || '주문 실패');
 			}
 		} catch {
 			result = { type: 'error', msg: '네트워크 오류' };
+			toastError('네트워크 오류');
 		} finally {
 			loading = false;
 		}

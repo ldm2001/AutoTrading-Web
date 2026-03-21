@@ -109,6 +109,30 @@ INDICES: dict[str, tuple[str, str]] = {
     "KPI100": ("2007", "코스피100"),
 }
 
+# KRX API로 전체 종목 가져오기 (KOSPI + KOSDAQ)
+def _krx_listing() -> int:
+    count = 0
+    for mkt_id, label in [("STK", "KOSPI"), ("KSQ", "KOSDAQ")]:
+        resp = requests.post(
+            "http://data.krx.co.kr/comm/bldAttend/getJsonData.cmd",
+            headers={"User-Agent": "Mozilla/5.0", "Referer": "http://data.krx.co.kr"},
+            data={"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": mkt_id, "share": "1", "csvxls_isNo": "false"},
+            timeout=15,
+        )
+        if not resp.ok:
+            continue
+        for row in resp.json().get("OutBlock_1", []):
+            code = row.get("ISU_SRT_CD", "")
+            name = row.get("ISU_ABBRV", "")
+            if not code or not name or len(code) != 6 or not code.isdigit():
+                continue
+            ALL_STOCKS[code] = {"name": name, "market": label}
+            if code not in NAMES:
+                NAMES[code] = name
+            count += 1
+    return count
+
+
 # 네이버 금융 API로 전체 종목 가져오기
 def _naver_listing() -> int:
     count = 0
@@ -198,7 +222,16 @@ def listing() -> None:
     except Exception as e:
         logger.warning("FDR listing failed: %s — trying Naver fallback", e)
 
-    # 2차: 네이버 금융
+    # 2차: KRX
+    try:
+        count = _krx_listing()
+        if count > 100:
+            logger.info("Loaded %s stocks via KRX API", count)
+            return
+    except Exception as e:
+        logger.warning("KRX listing failed: %s — trying Naver fallback", e)
+
+    # 3차: 네이버 금융
     try:
         count = _naver_listing()
         if count > 0:

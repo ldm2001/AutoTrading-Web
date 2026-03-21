@@ -10,6 +10,7 @@ import websockets
 from service.kis.auth import Auth
 from service.market.price_sync import PriceSync
 from service.market.stock_universe import ALL_STOCKS, NAMES
+from service.metrics import ws_reconnect
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,7 @@ class KISWS:
                 raise
             except Exception as err:
                 logger.warning("KIS WS fail: %s", err)
+                ws_reconnect.inc()
                 await asyncio.sleep(wait)
                 wait = min(wait * 2, 10.0)
             finally:

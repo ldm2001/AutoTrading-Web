@@ -32,6 +32,25 @@
 		);
 	});
 
+	// 가상 스크롤
+	const ITEM_HEIGHT = 33;
+	const OVERSCAN = 5;
+	let scrollContainer: HTMLDivElement;
+	let scrollTop = $state(0);
+	let containerHeight = $state(400);
+
+	const virtualStart = $derived(Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN));
+	const virtualEnd = $derived(Math.min(filteredStocks.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + OVERSCAN));
+	const virtualItems = $derived(filteredStocks.slice(virtualStart, virtualEnd));
+	const totalHeight = $derived(filteredStocks.length * ITEM_HEIGHT);
+	const offsetY = $derived(virtualStart * ITEM_HEIGHT);
+
+	function handleScroll(e: Event) {
+		const el = e.target as HTMLDivElement;
+		scrollTop = el.scrollTop;
+		containerHeight = el.clientHeight;
+	}
+
 	function handleInput() {
 		searchError = '';
 		clearTimeout(debounceTimer);
@@ -160,22 +179,27 @@
 			{/if}
 		</div>
 
-		<div class="stock-list">
-			{#each filteredStocks as stock (stock.code)}
-				<button
-					class="stock-item"
-					class:selected={$selectedStock === stock.code}
-					onclick={() => select(stock.code)}
-				>
-					<div class="stock-main">
-						<span class="stock-name">{stock.name}</span>
-						{#if autoSet.has(stock.code)}
-							<span class="stock-auto" class:live={$tradingStatus.is_running} class:off={!$tradingStatus.is_running}>AUTO</span>
-						{/if}
-					</div>
-					<span class="stock-market-tag">{stock.market}</span>
-				</button>
-			{/each}
+		<div class="stock-list" bind:this={scrollContainer} onscroll={handleScroll}>
+			<div style="height:{totalHeight}px;position:relative">
+				<div style="transform:translateY({offsetY}px)">
+					{#each virtualItems as stock (stock.code)}
+						<button
+							class="stock-item"
+							class:selected={$selectedStock === stock.code}
+							onclick={() => select(stock.code)}
+							style="height:{ITEM_HEIGHT}px"
+						>
+							<div class="stock-main">
+								<span class="stock-name">{stock.name}</span>
+								{#if autoSet.has(stock.code)}
+									<span class="stock-auto" class:live={$tradingStatus.is_running} class:off={!$tradingStatus.is_running}>AUTO</span>
+								{/if}
+							</div>
+							<span class="stock-market-tag">{stock.market}</span>
+						</button>
+					{/each}
+				</div>
+			</div>
 
 			{#if filteredStocks.length === 0}
 				<div class="watchlist-empty">

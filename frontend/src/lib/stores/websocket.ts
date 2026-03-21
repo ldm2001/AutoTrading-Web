@@ -9,8 +9,28 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 	let pingTimer: ReturnType<typeof setInterval> | null = null;
 	let attempts = 0;
 	const maxAttempts = 10;
-	// Set으로 변경 — 동일 핸들러 중복 등록 방지
 	const handlers: Map<string, Set<(data: unknown) => void>> = new Map();
+
+	// 프레임 배칭: 동일 타입 메시지를 RAF 단위로 묶어 한번만 dispatch
+	const pendingMessages: Map<string, unknown> = new Map();
+	let rafId: number | null = null;
+
+	function flushMessages() {
+		rafId = null;
+		for (const [type, msg] of pendingMessages) {
+			const fns = handlers.get(type);
+			if (fns) for (const fn of fns) fn(msg);
+		}
+		pendingMessages.clear();
+	}
+
+	function queueMessage(msg: { type: string; [key: string]: unknown }) {
+		// 같은 타입은 최신 메시지로 덮어씀 (배칭)
+		pendingMessages.set(msg.type, msg);
+		if (rafId === null) {
+			rafId = requestAnimationFrame(flushMessages);
+		}
+	}
 
 	function getUrl() {
 		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -34,8 +54,14 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 			if (event.data === 'pong') return;
 			try {
 				const msg = JSON.parse(event.data);
-				const fns = handlers.get(msg.type);
-				if (fns) for (const fn of fns) fn(msg);
+				// trade 이벤트는 즉시 dispatch (지연 불가)
+				if (msg.type === 'trade' || msg.type === 'message') {
+					const fns = handlers.get(msg.type);
+					if (fns) for (const fn of fns) fn(msg);
+				} else {
+					// price_update 등은 프레임 배칭
+					queueMessage(msg);
+				}
 			} catch {
 				// ignore non-JSON
 			}
@@ -53,7 +79,6 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 		ws.onerror = () => ws?.close();
 	}
 
-	// cleanup 함수 반환 — onMount 해제 시 호출해야 메모리 누수 방지
 	function on(type: string, handler: (data: unknown) => void) {
 		if (!handlers.has(type)) handlers.set(type, new Set());
 		handlers.get(type)!.add(handler);
@@ -63,6 +88,8 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 	function close() {
 		clearTimeout(reconnectTimer);
 		if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+		if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+		pendingMessages.clear();
 		ws?.close();
 	}
 
