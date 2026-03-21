@@ -142,15 +142,20 @@
 
 | 레이어 | 기술 |
 |--------|------|
-| **백엔드** | Python 3.11 / FastAPI / asyncio / httpx |
+| **백엔드** | Python 3.12 / FastAPI / asyncio / httpx |
 | **AI 예측** | PyTorch — Transformer 인코더 + PositionalEncoding |
 | **AI 분석** | Google Gemini API — 자연어 분석·리포트 |
 | **기술지표** | RSI / MACD / 볼린저밴드 — NumPy 벡터 연산 |
 | **SMC** | FVG(일봉+15분봉) / Order Block / BOS·CHoCH — 오버나잇 갭 필터 + 구조적 손절 |
-| **틱 파이프라인** | asyncio.Queue producer/consumer → CandleStore 15분/60분봉 조립 |
+| **틱 파이프라인** | Kafka producer/consumer (폴백: asyncio.Queue) → CandleStore 15분/60분봉 조립 |
+| **캐시** | Redis TTL 캐시 (폴백: 인메모리 dict) |
+| **이벤트 버스** | Redis Pub/Sub (폴백: 인프로세스 asyncio) |
+| **로그/검색** | Elasticsearch 주문·틱·봇 이벤트 인덱싱 + structlog JSON 로깅 |
+| **관측성** | Prometheus 커스텀 메트릭 + Grafana 대시보드 |
+| **인프라** | Docker Compose (Redis, Kafka, Elasticsearch, Prometheus, Grafana) |
 | **백테스터** | BacktestScorer — Scorer 팩터 메서드 직접 호출, FDR 일봉 + CandleStore 15분봉 |
 | **프론트엔드** | SvelteKit + TypeScript / lightweight-charts v5 |
-| **실시간** | WebSocket (FastAPI) ↔ Svelte 스토어 |
+| **실시간** | WebSocket (FastAPI) ↔ Svelte 스토어 (RAF 배칭) |
 | **브로커** | 한국투자증권 KIS OpenAPI (실거래 / 모의투자) |
 
 ### 핵심 설계 결정
@@ -278,6 +283,21 @@ npm run dev
 | WS | `/ws/trades` | 거래 이벤트 스트림 |
 
 ## 변경 이력
+
+### 2026-03-21
+- **Redis TTL 캐시**: 기존 인메모리 dict → Redis 기반 캐시로 전환 (장애 시 로컬 폴백)
+- **Kafka 틱 파이프라인**: asyncio.Queue → Kafka producer/consumer 전환 (폴백 유지)
+- **Elasticsearch 로그 인덱싱**: 주문·틱·봇 이벤트 ES 자동 적재
+- **Redis Pub/Sub 이벤트 버스**: 폴링 루프 → 이벤트 드리븐 아키텍처 전환
+- **Prometheus 메트릭**: 틱 큐 깊이, 주문 레이턴시, WS 클라이언트 수 등 커스텀 메트릭 + `/metrics` 엔드포인트
+- **structlog 구조화 로깅**: JSON 포맷 로그 출력으로 관측성 강화
+- **KRX 종목 리스트 폴백**: FDR 실패 시 KRX API 직접 조회 폴백 추가
+- **Docker Compose 인프라**: Redis, Kafka, Elasticsearch, Prometheus, Grafana 원클릭 구성
+- **가상 스크롤**: StockTable 3000+ 종목 뷰포트 기반 렌더링 (DOM 노드 최소화)
+- **WebSocket RAF 배칭**: price_update 메시지를 requestAnimationFrame 단위로 묶어 처리
+- **SWR 패턴**: stale-while-revalidate 서버 상태 캐시 + 낙관적 업데이트
+- **Toast 알림 시스템**: 주문 성공/실패 등 사용자 피드백 알림 UI
+- **CSS 디자인 토큰**: 색상·폰트·라운딩 등 공통 토큰 체계 정립
 
 ### 2026-03-01
 - **이벤트 기반 백테스터**: CandleStore 15분봉 + FDR 일봉으로 9팩터 전략 시뮬레이션, 미래 참조 방지, 누적수익률/MDD/승률/손익비 산출
