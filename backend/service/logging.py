@@ -4,8 +4,9 @@ import sys
 
 import structlog
 
-
+# structlog JSON 로깅 설정 함수
 def setup() -> None:
+    # structlog 프로세서 체인 구성
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -31,9 +32,11 @@ def setup() -> None:
         ],
     )
 
+    # stdout 핸들러에 JSON 포맷터 적용
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
 
+    # 루트 로거 초기화 (INFO 레벨)
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)

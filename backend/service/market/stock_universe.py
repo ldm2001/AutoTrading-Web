@@ -1,3 +1,4 @@
+# 전체 상장 종목 메타 관리 — FDR/KRX/네이버 폴백
 import logging
 from pathlib import Path
 import requests
@@ -87,7 +88,9 @@ NAMES: dict[str, str] = {
     "051900": "LG생활건강",
 }
 
+# 이름 → 코드 역방향 매핑
 CODES: dict[str, str] = {name: code for code, name in NAMES.items()}
+# 전체 상장 종목 저장소 (code → {name, market})
 ALL_STOCKS: dict[str, dict] = {}
 
 # 검색용 별칭 목록

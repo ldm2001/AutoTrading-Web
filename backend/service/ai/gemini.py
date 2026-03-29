@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 _cache = TTLCache()
 
+# Gemini API 클라이언트 — 매매 시그널/감성 분석/리포트 생성
 class GeminiClient:
 
     # API 키 유무에 따라 활성/비활성 초기화
@@ -188,4 +189,5 @@ class GeminiClient:
             _cache.set(cache_key, result, 3600)
         return result
 
+# 모듈 레벨 싱글턴 인스턴스
 gemini = GeminiClient()

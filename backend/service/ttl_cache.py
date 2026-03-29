@@ -1,3 +1,4 @@
+# Redis + 인메모리 폴백 TTL 캐시
 import json
 import logging
 import time
@@ -11,11 +12,13 @@ logger = logging.getLogger(__name__)
 # Redis 기반 TTL 캐시
 # 연결 실패 시 인메모리 폴백
 class TTLCache:
+    # 인메모리 저장소 초기화 후 Redis 연결 시도
     def __init__(self) -> None:
         self._local: dict[str, tuple[float, Any]] = {}
         self._redis: redis.Redis | None = None
         self._connect()
 
+    # Redis 서버 연결 (실패 시 인메모리 폴백)
     def _connect(self) -> None:
         try:
             is_tls = settings.redis_url.startswith("rediss://")
@@ -105,6 +108,7 @@ class TTLCache:
 
         self._local.clear()
 
+    # Redis 클라이언트 인스턴스 반환
     @property
     def redis(self) -> redis.Redis | None:
         return self._redis

@@ -76,8 +76,10 @@ class StockTransformer(nn.Module):
         x = self.transformer_encoder(x)
         return self.fc(x)
 
+# Transformer 기반 주가 예측 엔진
 class Predictor:
 
+    # 캐시/쓰레드풀 초기화
     def __init__(self):
         self._cache       = TTLCache()
         self._executor    = ThreadPoolExecutor(max_workers=2)

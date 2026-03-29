@@ -1,3 +1,4 @@
+# KIS 잔고 조회 및 시장가 주문 모듈
 import json
 import time
 import datetime
@@ -15,12 +16,14 @@ class Trade:
     TTL_HOLDINGS = 10
     TTL_CASH = 10
 
+    # 인증/캐시/정책/감사로그 의존성 주입
     def __init__(self, auth: Auth, cache: TTLCache, policy: Policy, audit: Callable[[dict], None] | None = None) -> None:
         self.auth = auth
         self.cache = cache
         self.policy = policy
         self._audit = audit
 
+    # 감사 로그 기록
     def _log(self, entry: dict) -> None:
         if self._audit:
             self._audit(entry)

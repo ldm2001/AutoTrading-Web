@@ -11,7 +11,9 @@ from service.event_bus import bus
 
 logger = logging.getLogger(__name__)
 
+# Kafka 기반 틱 큐 (폴백: asyncio.Queue)
 class TickQueue:
+    # 큐 초기화 — Kafka 및 asyncio.Queue 대기
     def __init__(self, maxsize: int = 10000) -> None:
         self._maxsize = maxsize
         self._running = False
@@ -24,6 +26,7 @@ class TickQueue:
         self._consumer = None
         self._use_kafka = False
 
+    # asyncio.Queue 인스턴스 생성 (렊은 초기화)
     def _ensure_queue(self) -> asyncio.Queue:
         if self._q is None:
             self._q = asyncio.Queue(maxsize=self._maxsize)
@@ -194,16 +197,19 @@ class TickQueue:
         finally:
             self._running = False
 
+    # 현재 큐 크기 반환
     @property
     def qsize(self) -> int:
         if self._q:
             return self._q.qsize()
         return 0
 
+    # 실행 상태 반환
     @property
     def running(self) -> bool:
         return self._running
 
+    # Kafka 연결 상태 반환
     @property
     def kafka_enabled(self) -> bool:
         return self._use_kafka

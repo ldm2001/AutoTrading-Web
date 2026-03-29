@@ -1,3 +1,4 @@
+# 읽기 경로 보호 + 재시도 + stale 폴백 정책
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
@@ -12,6 +13,7 @@ T = TypeVar("T")
 
 # 읽기 경로 보호 정책
 class Policy:
+    # 캐시 저장소 및 재시도 대기 시간 초기화
     def __init__(self) -> None:
         self._last: dict[str, object] = {}
         self._wait = (0.2, 0.5)
@@ -38,6 +40,7 @@ class Policy:
     ) -> T:
         err_last: Exception | None = None
 
+        # 최대 tries+1회 시도
         for turn in range(tries + 1):
             try:
                 value = await slot()
@@ -46,6 +49,8 @@ class Policy:
                 err_last = err
                 code = None
                 retry = False
+
+                # HTTP 상태 코드 기반 재시도 판단
 
                 if isinstance(err, httpx.HTTPStatusError):
                     code = err.response.status_code
@@ -74,6 +79,7 @@ class Policy:
                     break
                 await asyncio.sleep(self._wait[min(turn, len(self._wait) - 1)])
 
+        # stale 허용 시 마지막 성공 값으로 폴백
         if stale:
             cached = self.last(key)
             if cached is not None:

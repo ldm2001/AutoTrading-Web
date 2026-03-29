@@ -1,3 +1,4 @@
+# API 라우터 패키지 — 각 라우터를 re-export
 from api.stock import router as stock_router
 from api.trade import router as trade_router
 from api.ws import router as ws_router, manager, loop as price_loop

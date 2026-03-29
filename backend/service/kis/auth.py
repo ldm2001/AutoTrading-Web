@@ -1,3 +1,4 @@
+# KIS 접근 토큰 및 웹소켓 접속키 관리
 import json
 import logging
 import time
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 # 토큰과 공통 헤더를 관리
 class Auth:
+    # 토큰/접속키/세션 초기화
     def __init__(self, policy: Policy | None = None) -> None:
         self._client: httpx.AsyncClient | None = None
         self._token = ""

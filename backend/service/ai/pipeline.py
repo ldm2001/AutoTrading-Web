@@ -28,7 +28,6 @@ _KR_HOLIDAYS_2026 = {
     (10, 3), (10, 9), (12, 25),
 }
 
-
 # 장 개장 여부 확인 (주말/공휴일 제외)
 def _market_open(d: date | None = None) -> bool:
     d = d or date.today()
@@ -46,8 +45,10 @@ def _name(code: str) -> str:
     return NAMES.get(code, code)
 
 
+# AI 분석 파이프라인 — KIS/Gemini/뉴스/지표 통합 오케스트레이터
 class AIPipeline:
 
+    # Gemini API 활성화 여부 반환
     @property
     def enabled(self) -> bool:
         return gemini.enabled

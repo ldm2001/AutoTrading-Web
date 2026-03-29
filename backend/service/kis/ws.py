@@ -14,11 +14,17 @@ from service.metrics import ws_reconnect
 
 logger = logging.getLogger(__name__)
 
+# 웹소켓 경로 접미사
 _TRY = "/tryitout"
+# 핑퐁 메시지 키
 _PING = "PINGPONG"
+# 실시간 체결 TR ID
 _TR = "H0STCNT0"
+# 수신 타임아웃 (초)
 _STALE = 10.0
+# 구독 요청 간 딜레이 (초)
 _GAP = 0.05
+# 실시간 체결 데이터 컬럼 정의
 _COLS = [
     "MKSC_SHRN_ISCD",
     "STCK_CNTG_HOUR",
@@ -71,6 +77,7 @@ _COLS = [
 
 # 실시간 체결가 연결과 최신 상태를 관리
 class KISWS:
+    # WS 연결/구독/상태 초기화
     def __init__(self, auth: Auth, pipe: PriceSync) -> None:
         self.auth = auth
         self.pipe = pipe

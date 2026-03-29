@@ -54,15 +54,18 @@ class WS:
 
 manager = WS()
 
+# 현재 시간이 평일 장 시간(09:00~15:35) 인지 확인
 def _market_open(now: datetime.datetime) -> bool:
     mins = now.hour * 60 + now.minute
     return now.weekday() < 5 and 9 * 60 <= mins < 15 * 60 + 35
 
 
+# 요청 종목 수만큼 응답이 왔는지 확인
 def _full(codes: list[str], stocks: list[dict]) -> bool:
     want = len(dict.fromkeys(code.zfill(6) for code in codes if code))
     return len(stocks) >= want
 
+# 가격 웹소켓 연결 핸들러
 @router.websocket("/ws/prices")
 async def prices(websocket: WebSocket):
     await manager.attach_price(websocket)
@@ -76,6 +79,7 @@ async def prices(websocket: WebSocket):
         ws_clients.labels(channel="price").set(len(manager.price_clients))
 
 
+# 거래 웹소켓 연결 핸들러
 @router.websocket("/ws/trades")
 async def trades(websocket: WebSocket):
     await manager.attach_trade(websocket)

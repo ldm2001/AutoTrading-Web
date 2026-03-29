@@ -10,9 +10,11 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _DATA_DIR.mkdir(exist_ok=True)
 
+# 단일 캔들 (OHLCV + 시각)
 class Candle:
     __slots__ = ("o", "h", "l", "c", "v", "ts")
 
+    # 시가=고가=저가=종가로 초기화
     def __init__(self, price: int, volume: int, ts: datetime.datetime) -> None:
         self.o = price
         self.h = price
@@ -21,12 +23,14 @@ class Candle:
         self.v = volume
         self.ts = ts
 
+    # 고가/저가/종가/거래량 갱신
     def update(self, price: int, volume: int) -> None:
         self.h = max(self.h, price)
         self.l = min(self.l, price)
         self.c = price
         self.v += volume
 
+    # dict 형태로 스냅샷 반환
     def snapshot(self) -> dict:
         return {
             "time": self.ts,
@@ -37,7 +41,9 @@ class Candle:
             "volume": self.v,
         }
 
+# 틱 → 15분/60분봉 조립 및 CSV 저장
 class CandleStore:
+    # 저장 경로 및 버퍼 초기화
     def __init__(self, base_dir: Path | None = None) -> None:
         self._dir = base_dir or _DATA_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
@@ -101,18 +107,21 @@ class CandleStore:
             result.extend(self.load(code, interval, dt.isoformat()))
         return result
 
-    # private
+    # 시각을 interval 단위 버킷 키로 변환
     def _bucket_key(self, ts: datetime.datetime, interval: int) -> str:
         m = (ts.minute // interval) * interval
         return ts.replace(minute=m, second=0, microsecond=0).strftime("%H%M")
 
+    # 시각을 interval 단위 시작 시각으로 정렬
     def _bucket_ts(self, ts: datetime.datetime, interval: int) -> datetime.datetime:
         m = (ts.minute // interval) * interval
         return ts.replace(minute=m, second=0, microsecond=0)
 
+    # 종목/간격/날짜 기반 CSV 파일 경로 생성
     def _path(self, code: str, interval: int, date_str: str) -> Path:
         return self._dir / code / f"{date_str}_{interval}m.csv"
 
+    # 캔들 리스트를 CSV 파일로 저장
     def _write_csv(self, path: Path, rows: list[dict]) -> None:
         header = "time,open,high,low,close,volume\n"
         lines = [header]
@@ -122,6 +131,7 @@ class CandleStore:
             lines.append(f"{ts_str},{r['open']},{r['high']},{r['low']},{r['close']},{r['volume']}\n")
         path.write_text("".join(lines))
 
+    # CSV 파일에서 캔들 리스트 로드
     def _read_csv(self, path: Path) -> list[dict]:
         rows: list[dict] = []
         for line in path.read_text().strip().split("\n")[1:]:

@@ -82,6 +82,7 @@ async def stocks():
         if not any(tag in info["name"] for tag in ["KODEX", "TIGER", "ETF", "KBSTAR", "HANARO", "SOL ", "ARIRANG"])
     ]
 
+# 주요 시장 지수 조회
 @router.get("/index/all")
 async def indices():
     try:
@@ -269,6 +270,7 @@ async def sector_flow():
     except Exception:
         raise HTTPException(502, "업종 흐름 조회 실패")
 
+# 5호가 호가창 조회
 @router.get("/{code}/orderbook")
 async def orderbook(code: str):
     try:
@@ -276,6 +278,7 @@ async def orderbook(code: str):
     except Exception:
         raise HTTPException(502, "서비스 일시 오류")
 
+# 단일 종목 현재가 조회
 @router.get("/{code}/price")
 async def price(code: str):
     try:
@@ -283,6 +286,7 @@ async def price(code: str):
     except Exception:
         raise HTTPException(502, "서비스 일시 오류")
 
+# 일봉 캔들 조회 (기본 60일)
 @router.get("/{code}/daily")
 async def daily(code: str, count: int = 60):
     try:

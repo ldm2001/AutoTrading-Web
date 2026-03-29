@@ -34,10 +34,13 @@ SELL_THRESHOLD = -40
 _cache = TTLCache()
 _TTL   = 120
 
+# 9팩터 스코어링 엔진
 class Scorer:
+    # broker 의존성 주입 (지연 바인딩 지원)
     def __init__(self, broker: KIS | None = None) -> None:
         self._broker = broker
 
+    # broker 인스턴스 반환 (미설정 시 자동 임포트)
     @property
     def broker(self) -> KIS:
         if self._broker is None:
@@ -45,6 +48,7 @@ class Scorer:
             self._broker = kis
         return self._broker
 
+    # 캐시 키 생성 (prediction 있으면 캐싱 안 함)
     def _cache_key(self, code: str, *, fast: bool, prediction: dict | None) -> str | None:
         if prediction is not None:
             return None
@@ -301,7 +305,7 @@ class Scorer:
             return False, 0.0
 
 
-# 모듈 레벨 인스턴스
+# 모듈 레벨 싱글턴 인스턴스
 scorer = Scorer()
 
 # 하위 호환

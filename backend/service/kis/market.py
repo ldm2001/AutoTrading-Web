@@ -1,3 +1,4 @@
+# KIS 시세 및 차트 데이터 조회 모듈
 import asyncio
 import datetime as dt
 import logging
@@ -19,6 +20,7 @@ class Market:
     TTL_INDEX = 5
     TTL_TARGET = 30
 
+    # 인증/캐시/정책 의존성 주입
     def __init__(self, auth: Auth, cache: TTLCache, policy: Policy) -> None:
         self.auth = auth
         self.cache = cache
@@ -138,7 +140,7 @@ class Market:
         self.cache.set(key, candles, self.TTL_DAILY)
         return candles
 
-    # 15분봉을 묶어서 만듦
+    # 1분봉 3구간 수집 → 15분 단위 OHLCV 캔들로 집계
     async def candles_15m(self, code: str) -> list[dict]:
         key = f"candles_15m:{code}"
         cached = self.cache.get(key)
@@ -277,6 +279,7 @@ class Market:
     async def indices(self) -> list[dict]:
         items = list(INDICES.items())
 
+        # 단일 지수 조회 → 실패 시 마지막 캐시 반환
         async def one(name: str, api_code: str, label: str) -> dict | None:
             try:
                 data = await self.index(api_code)

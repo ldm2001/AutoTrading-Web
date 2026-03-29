@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _REDIS_BOT_KEY = "bot:state"
 
+# Bot 클래스 — 매수/손절/익절/장마감 자동매매 루프
 class Bot:
     # 봇 상태 초기화 — running/bought/logs/콜백 세팅
     def __init__(
@@ -263,6 +264,7 @@ class Bot:
             soldout = False
             last_eval_min = -1
 
+            # 메인 매매 루프
             while self.running:
                 now = datetime.datetime.now()
                 t_start = now.replace(hour=9, minute=5, second=0, microsecond=0)
@@ -326,4 +328,5 @@ class Bot:
         finally:
             self.running = False
 
+# 모듈 레벨 Bot 싱글턴 인스턴스
 bot = Bot(kis, tick_q, NAMES, watchlist_symbols)

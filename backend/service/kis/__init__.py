@@ -1,3 +1,4 @@
+# KIS API facade — 시세/주문/WS 모듈을 단일 인터페이스로 통합
 from service.kis.auth import Auth
 from service.kis.market import Market
 from service.kis.trade import Trade
@@ -19,6 +20,7 @@ class KIS:
     TTL_CASH = Trade.TTL_CASH
     TTL_TARGET = Market.TTL_TARGET
 
+    # 캐시/정책/인증/시세/주문/WS 서브 모듈 초기화
     def __init__(self) -> None:
         self.cache = TTLCache()
         self.policy = Policy()

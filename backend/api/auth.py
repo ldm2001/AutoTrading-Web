@@ -18,6 +18,7 @@ _LOCKOUT_THRESHOLD = 5
 _LOCKOUT_WINDOW = 900  # 15분
 
 
+# IP 잠금 여부 확인 (15분 내 5회 실패 시 차단)
 def _check_lockout(ip: str) -> None:
     now = time.time()
     _failures[ip] = [t for t in _failures[ip] if now - t < _LOCKOUT_WINDOW]
@@ -26,10 +27,12 @@ def _check_lockout(ip: str) -> None:
         raise HTTPException(429, "Too many failed attempts. Try again later.")
 
 
+# 인증 실패 기록
 def _record_failure(ip: str) -> None:
     _failures[ip].append(time.time())
 
 
+# API Key 검증 의존성 (미설정 시 바이패스)
 async def require_key(request: Request, key: str | None = Security(_header)) -> str:
     if not settings.api_key:
         return "no-auth"

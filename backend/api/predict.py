@@ -6,6 +6,7 @@ from service.ai.predict import predict_stock
 router = APIRouter(prefix="/api/predict")
 
 
+# Transformer 기반 5일 주가 예측 반환
 @router.get("/{code}")
 async def predict(code: str):
     code = code.zfill(6)

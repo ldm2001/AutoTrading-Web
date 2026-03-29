@@ -41,8 +41,9 @@ class BacktestResult:
     risk_reward: float = 0.0
     trades: list[Trade] = field(default_factory=list)
 
-# Scorer 내부 팩터 메서드를 직접 호출 (KIS API 의존 제거)
+# API 없이 로컬 데이터만으로 9팩터 스코어링
 class BacktestScorer:
+    # Scorer 내부 인스턴스 생성
     def __init__(self):
         self._s = Scorer()
 
@@ -70,6 +71,7 @@ class BacktestScorer:
         stop = smc.structural_stop(smc_candles, float(price))  # FVG 기반 동적 손절가
         return round(total, 1), stop
 
+# datetime → 문자열 변환 유틸리티
 def _time_str(dt) -> str:
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M")

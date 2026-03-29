@@ -23,6 +23,7 @@ from service.market.tick_queue import tick_q
 from service.event_bus import bus
 from service.logging import setup as setup_logging
 
+# 구조화 로깅 초기화
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI):
         await kis.stop()
     logger.info("Shutdown complete")
 
+# FastAPI 앱 인스턴스 생성
 app = FastAPI(
     title="KI AutoTrade API",
     version="2.0.0",
@@ -80,10 +82,13 @@ app = FastAPI(
 )
 
 
+# CORS 허용 오리진 목록
 _ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000", "http://localhost:4173"}
+# CSRF 검증 대상 HTTP 메서드
 _MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 
+# 보안 헤더 미들웨어 (CSRF 검증 + XSS/클릭재킹 방지)
 class SecurityHeaders(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # CSRF: 상태 변경 요청 시 Origin 헤더 검증
@@ -101,8 +106,10 @@ class SecurityHeaders(BaseHTTPMiddleware):
         return response
 
 
+# 보안 헤더 미들웨어 등록
 app.add_middleware(SecurityHeaders)
 
+# CORS 미들웨어 등록
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:4173"],
@@ -111,8 +118,10 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key"],
 )
 
+# 레이트 리밋 초과 핸들러 등록
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# API 라우터 등록
 app.include_router(stock_router)
 app.include_router(trade_router)
 app.include_router(ws_router)
@@ -120,6 +129,7 @@ app.include_router(ai_router)
 app.include_router(predict_router)
 app.include_router(backtest_router)
 
+# Prometheus 메트릭 엔드포인트 등록
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # 서버 상태 확인 (봇 실행 여부 포함)
