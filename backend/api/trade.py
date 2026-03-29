@@ -1,12 +1,16 @@
 # 매매/봇/워치리스트 API 라우터
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from api.auth import require_key
 from schema import OrderRequest
 from service.trading.bot import bot
 from service.kis import kis
 from service.trading.order_log import rows
 from service.trading.watchlist import load as load_watchlist, save as save_watchlist, symbols as watchlist_symbols
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/trading")
 
 # 봇 스캔 대상 종목 목록
@@ -23,7 +27,7 @@ async def watchlist():
 
 # 워치리스트 수정
 @router.put("/watchlist")
-async def edit_watchlist(body: WatchlistBody):
+async def edit_watchlist(body: WatchlistBody, _key: str = Depends(require_key)):
     codes = [c.strip() for c in body.codes if c.strip()]
     save_watchlist(codes)
     return {"codes": codes, "count": len(codes)}
@@ -39,20 +43,21 @@ async def portfolio():
             "total_profit_loss": int(evaluation.get("evlu_pfls_smtl_amt", "0")),
             "cash_balance":      await kis.cash(),
         }
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 # 주문 가능 예수금 조회
 @router.get("/balance")
 async def balance():
     try:
         return {"cash": await kis.cash()}
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 # 자동매매 봇 시작
 @router.post("/bot/start")
-async def start():
+@limiter.limit("3/minute")
+async def start(request: Request, _key: str = Depends(require_key)):
     if bot.running:
         raise HTTPException(409, "Bot is already running")
     await bot.start()
@@ -60,7 +65,8 @@ async def start():
 
 # 자동매매 봇 중지
 @router.post("/bot/stop")
-async def stop():
+@limiter.limit("3/minute")
+async def stop(request: Request, _key: str = Depends(require_key)):
     if not bot.running:
         raise HTTPException(409, "Bot is not running")
     await bot.stop()
@@ -73,19 +79,21 @@ async def status():
 
 # 시장가 매수 주문
 @router.post("/buy")
-async def buy(order: OrderRequest):
+@limiter.limit("5/minute")
+async def buy(request: Request, order: OrderRequest, _key: str = Depends(require_key)):
     try:
         return await kis.buy(order.code, order.qty)
-    except Exception as e:
-        raise HTTPException(502, f"Buy failed: {e}")
+    except Exception:
+        raise HTTPException(502, "주문 처리에 실패했습니다")
 
 # 시장가 매도 주문
 @router.post("/sell")
-async def sell(order: OrderRequest):
+@limiter.limit("5/minute")
+async def sell(request: Request, order: OrderRequest, _key: str = Depends(require_key)):
     try:
         return await kis.sell(order.code, order.qty)
-    except Exception as e:
-        raise HTTPException(502, f"Sell failed: {e}")
+    except Exception:
+        raise HTTPException(502, "주문 처리에 실패했습니다")
 
 # 섹터별 포트폴리오 히트맵 데이터
 @router.get("/portfolio/heatmap")
@@ -126,8 +134,8 @@ async def heatmap():
             })
         result.sort(key=lambda x: x["weight_pct"], reverse=True)
         return result
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 # 거래 내역 조회 (날짜별, 기본=오늘)
 @router.get("/history")

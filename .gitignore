@@ -26,6 +26,15 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
+# TLS certificates
+infra/certs/
+
+# KESE vulnerability reports (보안 취약점 상세 — 공개 금지)
+reports/kese/summary.md
+reports/kese/technical/
+reports/kese/administrative/
+reports/kese/physical/
+
 # Candle data
 backend/service/data/
 
@@ -35,3 +44,17 @@ templates/
 
 # PDCA / bkit generated docs
 docs/
+
+# Playwright / E2E 테스트 (루트 레벨)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+playwright.config.ts
+tests/
+
+# 루트 레벨 Playwright + 로드 테스트
+/package.json
+/package-lock.json
+load-test.js

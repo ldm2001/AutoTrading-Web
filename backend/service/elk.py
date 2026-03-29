@@ -18,6 +18,8 @@ def _es():
             settings.elasticsearch_url,
             request_timeout=5,
             max_retries=1,
+            verify_certs=False,
+            ssl_show_warn=False,
         )
         if _client.ping():
             logger.info("Elasticsearch connected: %s", settings.elasticsearch_url)

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
-	import { tradingStatus, addConsoleMessage } from '$lib/stores/trading';
+	import { tradingStatus, addConsoleMessage, authHeaders } from '$lib/stores/trading';
 	import { toastSuccess, toastError } from '$lib/stores/toast';
 	import type { OrderBook } from '$lib/types';
 	import './OrderPanel.css';
@@ -88,7 +88,7 @@
 		try {
 			const resp = await fetch(`/api/trading/${tab}`, {
 				method:  'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: authHeaders(),
 				body:    JSON.stringify({ code: $selectedStock, qty }),
 			});
 			const data = await resp.json();

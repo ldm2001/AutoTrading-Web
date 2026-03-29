@@ -1,17 +1,28 @@
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - ./infra/certs:/tls:ro
+    command: >-
+      redis-server
+      --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      --requirepass "${REDIS_PASSWORD:-changeme}"
+      --tls-port 6379 --port 0
+      --tls-cert-file /tls/server.crt
+      --tls-key-file /tls/server.key
+      --tls-ca-cert-file /tls/server.crt
+      --tls-auth-clients no
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--tls", "--insecure", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+    networks:
+      - data
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -21,71 +32,86 @@ services:
     volumes:
       - zk_data:/var/lib/zookeeper/data
     restart: unless-stopped
+    networks:
+      - data
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
-    ports:
-      - "9092:9092"
+    expose:
+      - "29092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka_data:/var/lib/kafka/data
     depends_on:
       - zookeeper
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
       interval: 15s
       timeout: 10s
       retries: 5
+    networks:
+      - data
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
-    ports:
-      - "9200:9200"
+    expose:
+      - "9200"
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.certificate=/usr/share/elasticsearch/config/certs/server.crt
+      - xpack.security.http.ssl.key=/usr/share/elasticsearch/config/certs/server.key
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      - ./infra/certs:/usr/share/elasticsearch/config/certs:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      test: ["CMD-SHELL", "curl -sk -u elastic:${ELASTIC_PASSWORD:-changeme} https://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
       interval: 15s
       timeout: 10s
       retries: 5
+    networks:
+      - data
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.0
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-changeme}
     depends_on:
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - data
+      - monitoring
 
   backend:
     build:
       context: ./backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=rediss://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       - KAFKA_BOOTSTRAP=kafka:29092
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-    volumes:
-      - ./backend:/app
+      - ELASTICSEARCH_URL=https://elastic:${ELASTIC_PASSWORD:-changeme}@elasticsearch:9200
     depends_on:
       redis:
         condition: service_healthy
@@ -97,43 +123,63 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    mem_limit: 1g
+    cpus: 1.0
+    networks:
+      - backend
+      - data
 
   frontend:
     build:
       context: ./frontend
     ports:
       - "3001:3000"
+      - "443:3443"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./infra/certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    networks:
+      - backend
 
   prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
+    image: prom/prometheus:v2.51.0
+    expose:
+      - "9090"
     volumes:
-      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - backend
+      - monitoring
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.1
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-ChangeMe!2026}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     depends_on:
       - prometheus
     restart: unless-stopped
+    networks:
+      - monitoring
+
+networks:
+  backend:
+  data:
+  monitoring:
 
 volumes:
   redis_data:

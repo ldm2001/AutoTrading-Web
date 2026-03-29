@@ -42,5 +42,5 @@ async def ind(code: str):
     try:
         candles = await kis.daily(code)
         return summary(candles)
-    except Exception as e:
-        raise HTTPException(502, f"기술 지표 계산 실패: {e}")
+    except Exception:
+        raise HTTPException(502, "기술 지표 계산 실패")

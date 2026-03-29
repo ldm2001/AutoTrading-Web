@@ -1,6 +1,15 @@
 import { get, writable } from 'svelte/store';
 import type { TradingStatus, SectorCell } from '$lib/types';
 
+export const apiKey = writable<string>(
+	typeof localStorage !== 'undefined' ? localStorage.getItem('api_key') ?? '' : ''
+);
+
+export function authHeaders(): HeadersInit {
+	const key = typeof localStorage !== 'undefined' ? localStorage.getItem('api_key') ?? '' : '';
+	return key ? { 'Content-Type': 'application/json', 'X-API-Key': key } : { 'Content-Type': 'application/json' };
+}
+
 export const tradingStatus = writable<TradingStatus>({
 	is_running: false,
 	bought_list: [],
@@ -29,13 +38,13 @@ export async function fetchWatchlist() {
 }
 
 export async function startBot() {
-	const resp = await fetch('/api/trading/bot/start', { method: 'POST' });
+	const resp = await fetch('/api/trading/bot/start', { method: 'POST', headers: authHeaders() });
 	if (resp.ok) await fetchTradingStatus();
 	return resp.ok;
 }
 
 export async function stopBot() {
-	const resp = await fetch('/api/trading/bot/stop', { method: 'POST' });
+	const resp = await fetch('/api/trading/bot/stop', { method: 'POST', headers: authHeaders() });
 	if (resp.ok) await fetchTradingStatus();
 	return resp.ok;
 }
@@ -50,7 +59,7 @@ export async function flipWatchlist(code: string) {
 	try {
 		const resp = await fetch('/api/trading/watchlist', {
 			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
+			headers: authHeaders(),
 			body: JSON.stringify({ codes: next })
 		});
 		if (!resp.ok) return { ok: false, active: codes.includes(code) };

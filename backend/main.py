@@ -1,12 +1,17 @@
 # cd backend
 # uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
 from service.trading.bot import bot
@@ -66,15 +71,47 @@ async def lifespan(app: FastAPI):
         await kis.stop()
     logger.info("Shutdown complete")
 
-app = FastAPI(title="KI AutoTrade API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="KI AutoTrade API",
+    version="2.0.0",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+)
+
+
+_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000", "http://localhost:4173"}
+_MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+
+class SecurityHeaders(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # CSRF: 상태 변경 요청 시 Origin 헤더 검증
+        if request.method in _MUTATING_METHODS:
+            origin = request.headers.get("origin")
+            if origin and origin not in _ALLOWED_ORIGINS:
+                return Response("Forbidden: origin not allowed", status_code=403)
+
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+
+app.add_middleware(SecurityHeaders)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:4173"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(stock_router)
 app.include_router(trade_router)

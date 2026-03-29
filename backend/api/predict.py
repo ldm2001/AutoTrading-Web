@@ -21,5 +21,5 @@ async def predict(code: str):
         }
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
-        raise HTTPException(502, f"예측 실패: {e}")
+    except Exception:
+        raise HTTPException(502, "예측 처리 실패")

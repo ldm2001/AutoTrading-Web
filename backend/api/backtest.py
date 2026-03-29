@@ -4,7 +4,7 @@ import logging
 from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from service.trading.backtest import BacktestConfig, run
 from service.market.candle_store import store
@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api/backtest")
 # 백테스트 요청 파라미터
 class BacktestRequest(BaseModel):
     code: str
-    days: int = 30
-    take_profit_pct: float = 5.0
-    max_hold_bars: int = 20
+    days: int = Field(default=30, ge=7, le=365)
+    take_profit_pct: float = Field(default=5.0, ge=0.1, le=50.0)
+    max_hold_bars: int = Field(default=20, ge=1, le=100)
 
 
 @router.post("")
@@ -51,8 +51,8 @@ async def backtest(req: BacktestRequest):
                 "close":  int(row["Close"]),
                 "volume": int(row["Volume"]),
             })
-    except Exception as e:
-        raise HTTPException(502, f"일봉 데이터 수집 실패: {e}")
+    except Exception:
+        raise HTTPException(502, "일봉 데이터 수집 실패")
 
     if len(daily) < 35:
         raise HTTPException(400, f"일봉 데이터 부족 ({len(daily)}개, 최소 35개 필요)")

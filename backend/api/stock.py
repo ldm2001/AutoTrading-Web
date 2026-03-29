@@ -86,8 +86,8 @@ async def stocks():
 async def indices():
     try:
         return await kis.indices()
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 # 종목 검색
 @router.get("/search")
@@ -108,8 +108,8 @@ async def find(query: str):
                 raise HTTPException(404, "종목을 찾을 수 없습니다")
     try:
         return await kis.price(code)
-    except Exception as e:
-        raise HTTPException(502, f"Stock not found: {e}")
+    except Exception:
+        raise HTTPException(502, "종목 정보를 조회할 수 없습니다")
 
 # 1단계 추천 후보를 계산
 async def screen() -> dict:
@@ -266,29 +266,29 @@ async def sector_flow():
             result.append({"sector": s["sector"], "avg_change_pct": avg, "stock_count": s["count"], "top_stocks": s["stocks"][:3], "bottom_stocks": s["stocks"][-2:]})
         result.sort(key=lambda x: x["avg_change_pct"], reverse=True)
         return result
-    except Exception as e:
-        raise HTTPException(502, f"Sector flow error: {e}")
+    except Exception:
+        raise HTTPException(502, "업종 흐름 조회 실패")
 
 @router.get("/{code}/orderbook")
 async def orderbook(code: str):
     try:
         return await kis.orderbook(code)
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 @router.get("/{code}/price")
 async def price(code: str):
     try:
         return await kis.price(code)
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 @router.get("/{code}/daily")
 async def daily(code: str, count: int = 60):
     try:
         return await kis.daily(code, count)
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")
 
 # 변동성 분석 (ATR, BB 폭, 일중 변동폭)
 @router.get("/{code}/volatility")
@@ -305,5 +305,5 @@ async def stock_volatility(code: str):
             vol["bb_position"] = bb_pos
             vol["bb"] = bb
         return vol
-    except Exception as e:
-        raise HTTPException(502, f"KIS API error: {e}")
+    except Exception:
+        raise HTTPException(502, "서비스 일시 오류")

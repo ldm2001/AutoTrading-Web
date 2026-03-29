@@ -18,11 +18,13 @@ class TTLCache:
 
     def _connect(self) -> None:
         try:
+            is_tls = settings.redis_url.startswith("rediss://")
             self._redis = redis.from_url(
                 settings.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=2,
                 socket_timeout=1,
+                **({"ssl_cert_reqs": "none"} if is_tls else {}),
             )
             self._redis.ping()
             logger.info("Redis connected: %s", settings.redis_url)

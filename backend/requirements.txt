@@ -18,3 +18,4 @@ prometheus-fastapi-instrumentator>=7.0.0
 prometheus-client>=0.20.0
 aiokafka>=0.10.0
 elasticsearch[async]>=8.0.0
+slowapi>=0.1.9
