@@ -280,7 +280,7 @@ class Scorer:
                 "signal":     "hold",
                 "score":      0,
                 "factors":    [],
-                "summary":    f"평가 실패: {e}",
+                "summary":    "평가 실패 (서버 로그 참조)",
                 "price":      0,
                 "stop_price": None,
             }

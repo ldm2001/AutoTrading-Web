@@ -9,23 +9,35 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL = "events"
 
+
 class EventBus:
     def __init__(self) -> None:
         self._handlers: dict[str, list[Callable]] = {}
         self._redis = None
         self._task: asyncio.Task | None = None
-        # Redis 없을 때 인프로세스 폴백
         self._local_queue: asyncio.Queue | None = None
 
     # Redis 연결 설정
     def bind(self, redis_client) -> None:
         self._redis = redis_client
 
-    # 이벤트 핸들러 등록
-    def on(self, event: str, handler: Callable) -> None:
+    # 이벤트 핸들러 등록 — 해제 함수 반환
+    def on(self, event: str, handler: Callable) -> Callable[[], None]:
         if event not in self._handlers:
             self._handlers[event] = []
         self._handlers[event].append(handler)
+
+        def _off() -> None:
+            try:
+                self._handlers[event].remove(handler)
+            except ValueError:
+                pass
+
+        return _off
+
+    # 특정 이벤트의 모든 핸들러 해제
+    def off_all(self, event: str) -> None:
+        self._handlers.pop(event, None)
 
     # 이벤트 발행
     async def emit(self, event: str, data: Any = None) -> None:
@@ -64,24 +76,34 @@ class EventBus:
                 pass
             self._task = None
 
-    # Redis Pub/Sub 구독 루프
+    # Redis Pub/Sub 비동기 구독 루프 (블로킹 폴링 제거)
     async def _redis_loop(self) -> None:
         try:
             pubsub = self._redis.pubsub()
             pubsub.subscribe(_CHANNEL)
+            loop = asyncio.get_running_loop()
             while True:
-                msg = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                # 블로킹 get_message를 executor로 격리 → 이벤트 루프 차단 방지
+                msg = await loop.run_in_executor(
+                    None,
+                    lambda: pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0),
+                )
                 if msg and msg["type"] == "message":
                     try:
                         payload = json.loads(msg["data"])
                         await self._dispatch(payload["event"], payload.get("data"))
                     except Exception as e:
                         logger.debug("EventBus dispatch error: %s", e)
-                await asyncio.sleep(0.05)
         except asyncio.CancelledError:
             pass
         except Exception as e:
             logger.error("EventBus redis loop error: %s", e)
+        finally:
+            try:
+                pubsub.unsubscribe(_CHANNEL)
+                pubsub.close()
+            except Exception:
+                pass
 
     # 인프로세스 폴백 루프
     async def _local_loop(self) -> None:
@@ -99,7 +121,7 @@ class EventBus:
 
     # 핸들러 디스패치
     async def _dispatch(self, event: str, data: Any) -> None:
-        handlers = self._handlers.get(event, [])
+        handlers = list(self._handlers.get(event, []))
         for handler in handlers:
             try:
                 result = handler(event, data)

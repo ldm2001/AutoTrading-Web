@@ -39,6 +39,7 @@ class Bot:
         self.on_trade: Callable | None = None
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
+        self._unsub_tick: Callable | None = None
 
     # Redis에 봇 보유 상태 저장
     def _save_state(self) -> None:
@@ -78,14 +79,17 @@ class Bot:
             if data and data.get("code") in self.bought:
                 self._last_tick_code = data["code"]
                 self._tick_event.set()
-        bus.on("tick", _on_tick)
+        self._unsub_tick = bus.on("tick", _on_tick)
 
         self._task = asyncio.create_task(self._run())
         await self._msg("=== 자동매매 시작 ===")
 
-    # 봇 중지 — 전역 시세 파이프라인은 유지하고 봇 루프만 종료
+    # 봇 중지 — tick 핸들러 해제 후 봇 루프 종료
     async def stop(self) -> None:
         self.running = False
+        if self._unsub_tick:
+            self._unsub_tick()
+            self._unsub_tick = None
         if self._task:
             self._task.cancel()
             self._task = None

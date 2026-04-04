@@ -19,6 +19,9 @@ dist/
 .vscode/
 .idea/
 
+# oh-my-claudecode plugin state
+.omc/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -16,6 +16,7 @@ class TTLCache:
     def __init__(self) -> None:
         self._local: dict[str, tuple[float, Any]] = {}
         self._redis: redis.Redis | None = None
+        self._access_count: int = 0
         self._connect()
 
     # Redis 서버 연결 (실패 시 인메모리 폴백)
@@ -35,6 +36,17 @@ class TTLCache:
             logger.warning("Redis unavailable, using in-memory fallback: %s", e)
             self._redis = None
 
+    # 만료 엔트리 주기적 정리 (100회 get 마다 실행)
+    def _maybe_purge(self) -> None:
+        self._access_count += 1
+        if self._access_count < 100:
+            return
+        self._access_count = 0
+        now = time.time()
+        expired = [k for k, (exp, _) in self._local.items() if now >= exp]
+        for k in expired:
+            del self._local[k]
+
     # 유효한 캐시만 반환
     def get(self, key: str) -> Any | None:
         if self._redis is not None:
@@ -48,6 +60,7 @@ class TTLCache:
             except Exception:
                 pass
 
+        self._maybe_purge()
         entry = self._local.get(key)
         if entry is None:
             cache_miss.inc()
