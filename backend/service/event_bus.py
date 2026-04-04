@@ -36,7 +36,7 @@ class EventBus:
         return _off
 
     # 특정 이벤트의 모든 핸들러 해제
-    def off_all(self, event: str) -> None:
+    def unbind(self, event: str) -> None:
         self._handlers.pop(event, None)
 
     # 이벤트 발행

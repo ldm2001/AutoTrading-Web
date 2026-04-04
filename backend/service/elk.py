@@ -32,7 +32,7 @@ def _es():
     return _client
 
 # 주문 로그를 ES에 인덱싱
-def index_order(entry: dict[str, Any]) -> None:
+def order(entry: dict[str, Any]) -> None:
     es = _es()
     if es is None:
         return
@@ -41,10 +41,10 @@ def index_order(entry: dict[str, Any]) -> None:
         doc["@timestamp"] = doc.get("time") or datetime.datetime.now().isoformat()
         es.index(index="orders", document=doc)
     except Exception as e:
-        logger.debug("ES index_order failed: %s", e)
+        logger.debug("ES order failed: %s", e)
 
 # 틱 데이터를 ES에 벌크 인덱싱
-def index_tick(code: str, price: int, volume: int, ts: datetime.datetime) -> None:
+def tick(code: str, price: int, volume: int, ts: datetime.datetime) -> None:
     es = _es()
     if es is None:
         return
@@ -59,7 +59,7 @@ def index_tick(code: str, price: int, volume: int, ts: datetime.datetime) -> Non
         pass
 
 # 봇 이벤트 로그 (시작/종료/에러 등)
-def index_event(event_type: str, detail: str = "", **extra: Any) -> None:
+def event(event_type: str, detail: str = "", **extra: Any) -> None:
     es = _es()
     if es is None:
         return

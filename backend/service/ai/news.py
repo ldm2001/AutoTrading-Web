@@ -14,7 +14,7 @@ _last_request: float = 0
 _REQUEST_INTERVAL = 1.0 # 요청 간격
 
 # 네이버 증권 종목 뉴스 크롤링
-async def fetch_news(code: str, count: int = 10) -> list[dict]:
+async def headlines(code: str, count: int = 10) -> list[dict]:
     global _last_request
 
     key = f"{code}:{count}"

@@ -63,12 +63,12 @@ class AIPipeline:
             # daily + news + price 병렬 요청
             candles, stock_news, stock_info = await asyncio.gather(
                 kis.daily(code),
-                news.fetch_news(code),
+                news.headlines(code),
                 kis.price(code),
             )
             ind = indicators.summary(candles)
             if gemini.enabled:
-                ai_signal = await gemini.analyze_signal(ind, stock_news, stock_info)
+                ai_signal = await gemini.signal(ind, stock_news, stock_info)
             else:
                 ai_signal = None
             result = {
@@ -95,9 +95,9 @@ class AIPipeline:
             return cached
         try:
             stock_name = _name(code)
-            stock_news = await news.fetch_news(code, count=10)
+            stock_news = await news.headlines(code, count=10)
             if gemini.enabled:
-                gemini_result = await gemini.analyze_sentiment(stock_news, stock_name)
+                gemini_result = await gemini.sentiment(stock_news, stock_name)
                 if gemini_result:
                     result = {"code": code, "name": stock_name, **gemini_result}
                     _sentiment_cache.set(code, result, _SENTIMENT_TTL)
@@ -137,7 +137,7 @@ class AIPipeline:
                 "cash_balance":      cash,
             }
             today = date.today()
-            return await gemini.generate_report(
+            return await gemini.report(
                 trades, portfolio, market,
                 today_str=today.strftime("%Y-%m-%d (%A)"),
                 market_open=_market_open(today),

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 _client: httpx.AsyncClient | None = None
 
 
-def _get_client() -> httpx.AsyncClient:
+def _http() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(timeout=5.0)
@@ -23,7 +23,7 @@ async def notify(msg: str) -> None:
         return
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        client = _get_client()
+        client = _http()
         await client.post(
             settings.discord_webhook_url,
             json={"content": f"[{now}] {msg}"},

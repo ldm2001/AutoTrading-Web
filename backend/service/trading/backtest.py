@@ -108,7 +108,7 @@ def run(
 
             # 1) FVG 동적 손절
             if stop_price and bar["low"] <= stop_price:
-                _close_trade(trades, equity, entry_bar, candles_15m,
+                _exit(trades, equity, entry_bar, candles_15m,
                              i, bar_time, entry_price, stop_price, "stop")
                 in_trade = False
                 continue
@@ -116,21 +116,21 @@ def run(
             # 2) 고정 % 폴백 손절
             fallback = entry_price * (1 - cfg.fallback_stop_pct / 100)
             if bar["low"] <= fallback:
-                _close_trade(trades, equity, entry_bar, candles_15m,
+                _exit(trades, equity, entry_bar, candles_15m,
                              i, bar_time, entry_price, fallback, "stop")
                 in_trade = False
                 continue
 
             # 3) 익절 (+tp%)
             if bar["high"] >= tp_price:
-                _close_trade(trades, equity, entry_bar, candles_15m,
+                _exit(trades, equity, entry_bar, candles_15m,
                              i, bar_time, entry_price, tp_price, "tp")
                 in_trade = False
                 continue
 
             # 4) 최대 보유 봉수 초과 - 종가 청산
             if hold_bars >= cfg.max_hold_bars:
-                _close_trade(trades, equity, entry_bar, candles_15m,
+                _exit(trades, equity, entry_bar, candles_15m,
                              i, bar_time, entry_price, float(bar["close"]), "trail")
                 in_trade = False
                 continue
@@ -156,7 +156,7 @@ def run(
     return _metrics(code, n, trades, equity)
 
 # 거래 청산 기록 + 에퀴티 갱신
-def _close_trade(
+def _exit(
     trades: list[Trade],
     equity: list[float],
     entry_bar: int,

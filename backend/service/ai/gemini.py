@@ -50,7 +50,7 @@ class GeminiClient:
             return None
 
     # 기술지표 + 뉴스 기반 매매 시그널 분석 (1분 캐시)
-    async def analyze_signal(
+    async def signal(
         self, indicators: dict, news: list[dict], stock_info: dict
     ) -> dict | None:
         cache_key = f"signal:{stock_info.get('code', '')}"
@@ -90,7 +90,7 @@ class GeminiClient:
         return result
 
     # 뉴스 감성 분석 — 긍정/중립/부정 분류 + 전체 점수 반환 (5분 캐시)
-    async def analyze_sentiment(self, news: list[dict], stock_name: str) -> dict | None:
+    async def sentiment(self, news: list[dict], stock_name: str) -> dict | None:
         cache_key = f"sentiment:{stock_name}"
         cached = _cache.get(cache_key)
         if cached is not None:
@@ -127,7 +127,7 @@ class GeminiClient:
         return result
 
     # 일일 마켓 리포트 마크다운 생성 (1시간 캐시)
-    async def generate_report(
+    async def report(
         self, trades: list[dict], portfolio: dict, market: list[dict],
         *, today_str: str = "", market_open: bool = True
     ) -> str | None:

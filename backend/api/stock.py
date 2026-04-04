@@ -235,7 +235,7 @@ async def recommend():
 # 업종별 등락 흐름
 @router.get("/sector/flow")
 async def sector_flow():
-    from service.market.sector import sector_of
+    from service.market.sector import label
     try:
         codes = list(NAMES.keys())[:80]
         sem = asyncio.Semaphore(15)
@@ -244,7 +244,7 @@ async def sector_flow():
             async with sem:
                 try:
                     p = await kis.price(code)
-                    return {"code": code, "name": NAMES.get(code, code), "sector": sector_of(code), "change_pct": p.get("change_percent", 0), "price": p.get("price", 0)}
+                    return {"code": code, "name": NAMES.get(code, code), "sector": label(code), "change_pct": p.get("change_percent", 0), "price": p.get("price", 0)}
                 except Exception:
                     return None
 
@@ -296,7 +296,7 @@ async def daily(code: str, count: int = 60):
 
 # 변동성 분석 (ATR, BB 폭, 일중 변동폭)
 @router.get("/{code}/volatility")
-async def stock_volatility(code: str):
+async def volatility(code: str):
     from service.market.indicators import volatility, rsi, bollinger
     try:
         candles = await kis.daily(code, 60)

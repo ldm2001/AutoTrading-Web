@@ -98,7 +98,7 @@ async def sell(request: Request, order: OrderRequest, _key: str = Depends(requir
 # 섹터별 포트폴리오 히트맵 데이터
 @router.get("/portfolio/heatmap")
 async def heatmap():
-    from service.market.sector import sector_of
+    from service.market.sector import label
     try:
         items, _ = await kis.holdings()
         item_list = list(items.values())
@@ -106,7 +106,7 @@ async def heatmap():
 
         sectors: dict[str, dict] = {}
         for item in item_list:
-            sector = sector_of(item["code"])
+            sector = label(item["code"])
             if sector not in sectors:
                 sectors[sector] = {"eval_amount": 0, "profit_loss": 0, "stocks": []}
             s = sectors[sector]

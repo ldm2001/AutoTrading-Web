@@ -34,7 +34,7 @@ def _evict() -> None:
 
 
 # IP 잠금 여부 확인 (15분 내 5회 실패 시 차단)
-def _check_lockout(ip: str) -> None:
+def _lockout(ip: str) -> None:
     now = time.time()
     if ip in _failures:
         _failures[ip] = [t for t in _failures[ip] if now - t < _LOCKOUT_WINDOW]
@@ -49,7 +49,7 @@ def _check_lockout(ip: str) -> None:
 
 
 # 인증 실패 기록
-def _record_failure(ip: str) -> None:
+def _failure(ip: str) -> None:
     if ip not in _failures:
         _failures[ip] = []
     _failures[ip].append(time.time())
@@ -62,10 +62,10 @@ async def require_key(request: Request, key: str | None = Security(_header)) -> 
         return "no-auth"
 
     client_ip = request.client.host if request.client else "unknown"
-    _check_lockout(client_ip)
+    _lockout(client_ip)
 
     if not key or not secrets.compare_digest(key, settings.api_key):
-        _record_failure(client_ip)
+        _failure(client_ip)
         logger.warning("Unauthorized API access attempt from %s", client_ip)
         raise HTTPException(403, "Invalid or missing API key")
     return key

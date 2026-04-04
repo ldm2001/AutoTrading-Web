@@ -2,7 +2,7 @@
 import datetime
 import json
 from pathlib import Path
-from service.elk import index_order
+from service.elk import order as elk_order
 
 _DIR = Path(__file__).resolve().parent.parent / "trades" / "orders"
 _DIR.mkdir(parents=True, exist_ok=True)
@@ -19,7 +19,7 @@ def append(entry: dict) -> None:
     line = json.dumps(entry, ensure_ascii=False)
     with f.open("a", encoding="utf-8") as fp:
         fp.write(line + "\n")
-    index_order(entry)
+    elk_order(entry)
 
 # 날짜별 주문 로그 조회
 def rows(date: str | None = None) -> list[dict]:

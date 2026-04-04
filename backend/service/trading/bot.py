@@ -42,7 +42,7 @@ class Bot:
         self._unsub_tick: Callable | None = None
 
     # Redis에 봇 보유 상태 저장
-    def _save_state(self) -> None:
+    def _snapshot(self) -> None:
         r = self.broker.cache.redis
         if r is None:
             return
@@ -52,7 +52,7 @@ class Bot:
             logger.warning("Bot state save failed: %s", e)
 
     # Redis에서 봇 보유 상태 복원
-    def _restore_state(self) -> None:
+    def _recovery(self) -> None:
         r = self.broker.cache.redis
         if r is None:
             return
@@ -70,7 +70,7 @@ class Bot:
             return
         self.running = True
         self.bought = {}
-        self._restore_state()
+        self._recovery()
         self.logs = order_log_rows()
         await self.queue.start()
 
@@ -136,14 +136,14 @@ class Bot:
         }
         self.logs.append(entry)
         order_log_append(entry)
-        self._save_state()
+        self._snapshot()
         action = "매수" if kind == "buy" else "매도"
         await self._msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
         if self.on_trade:
             await self.on_trade(entry)
 
     # ── 손절/익절 모니터링 (동적 손절 지원) ──
-    async def _check_holdings(self) -> None:
+    async def _holdings(self) -> None:
         for code, info in list(self.bought.items()):
             try:
                 sp = info.get("stop_price")
@@ -179,7 +179,7 @@ class Bot:
                 logger.error(f"Holdings check error ({code}): {e}")
 
     # 멀티팩터 매수 판단 
-    async def _try_buy(self, sym: str, buy_amount: float) -> None:
+    async def _entry(self, sym: str, buy_amount: float) -> None:
         try:
             # 예측 데이터
             prediction = None
@@ -284,7 +284,7 @@ class Bot:
 
                     # 손절/익절 체크 (30초마다)
                     if self.bought and now.second < 10:
-                        await self._check_holdings()
+                        await self._holdings()
 
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
@@ -295,7 +295,7 @@ class Bot:
                                 break
                             if sym in self.bought:
                                 continue
-                            await self._try_buy(sym, buy_amount)
+                            await self._entry(sym, buy_amount)
                             await asyncio.sleep(1)
 
                     # 30분마다 잔고 갱신

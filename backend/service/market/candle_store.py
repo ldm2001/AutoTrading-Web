@@ -83,7 +83,7 @@ class CandleStore:
                     rows = [c.snapshot() for c in sorted(bucket.values(), key=lambda c: c.ts)]
                     path = self._path(code, interval, date_str)
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    self._write_csv(path, rows)
+                    self._csv_out(path, rows)
                     saved += 1
                     logger.info(f"Saved {len(rows)} candles → {path}")
             self._buf.clear()
@@ -96,7 +96,7 @@ class CandleStore:
         path = self._path(code, interval, date_str)
         if not path.exists():
             return []
-        return self._read_csv(path)
+        return self._csv_in(path)
 
     # 최근 N일 분봉 병합 로드
     def load_days(self, code: str, interval: int = 15, days: int = 5) -> list[dict]:
@@ -122,7 +122,7 @@ class CandleStore:
         return self._dir / code / f"{date_str}_{interval}m.csv"
 
     # 캔들 리스트를 CSV 파일로 저장
-    def _write_csv(self, path: Path, rows: list[dict]) -> None:
+    def _csv_out(self, path: Path, rows: list[dict]) -> None:
         header = "time,open,high,low,close,volume\n"
         lines = [header]
         for r in rows:
@@ -132,7 +132,7 @@ class CandleStore:
         path.write_text("".join(lines))
 
     # CSV 파일에서 캔들 리스트 로드
-    def _read_csv(self, path: Path) -> list[dict]:
+    def _csv_in(self, path: Path) -> list[dict]:
         rows: list[dict] = []
         for line in path.read_text().strip().split("\n")[1:]:
             parts = line.split(",")

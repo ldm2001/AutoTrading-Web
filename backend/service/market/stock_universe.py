@@ -161,13 +161,13 @@ def _naver_listing() -> int:
 
     # 시장 구분: 네이버 개별 종목 API로 보정 (상위 종목만)
     # 나머지는 빈 문자열 → 프론트에서 표시 안 함
-    _resolve_markets(list(ALL_STOCKS.keys()))
+    _markets(list(ALL_STOCKS.keys()))
     return count
 
 # 시장 구분 보정 — KRX로 시도 후 캐시 파일에 저장
 _MARKET_CACHE = Path(__file__).parent.parent / "trades" / "market_cache.json"
 
-def _resolve_markets(codes: list[str]) -> None:
+def _markets(codes: list[str]) -> None:
     # 1차: 캐시 파일에서 복원
     if _MARKET_CACHE.exists():
         try:

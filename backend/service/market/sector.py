@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 SECTOR_MAP: dict[str, str] = {}
 
 # FDR로 KOSPI/KOSDAQ 종목 섹터 로드
-def load_sectors():
+def sectors():
     global SECTOR_MAP
     try:
         import FinanceDataReader as fdr
@@ -32,5 +32,5 @@ def load_sectors():
         logger.error(f"섹터 매핑 실패: {e}")
 
 # 종목코드로 섹터 조회, 미매핑 시 "기타"
-def sector_of(code: str) -> str:
+def label(code: str) -> str:
     return SECTOR_MAP.get(code.zfill(6), "기타")

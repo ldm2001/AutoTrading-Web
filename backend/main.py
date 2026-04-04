@@ -17,7 +17,7 @@ from api import stock_router, trade_router, ws_router, ai_router, predict_router
 from service.trading.bot import bot
 from service.kis import kis
 from service.market.price_sync import price_sync
-from service.market.sector import load_sectors
+from service.market.sector import sectors
 from service.market.stock_universe import listing
 from service.market.tick_queue import tick_q
 from service.event_bus import bus
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Loading all stock listings")
     listing()
-    load_sectors()
+    sectors()
     logger.info("Starting KIS API")
     kis_ok = False
     try:
