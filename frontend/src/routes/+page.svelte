@@ -165,13 +165,6 @@
 				</button>
 
 				<span class="menu-label">매매</span>
-				<button class="menu-item" onclick={() => openMenu('order')}>
-					<span class="menu-dot order"></span>주식주문
-				</button>
-				<button class="menu-item" onclick={() => openMenu('auto')}>
-					<span class="menu-dot auto" class:ready={autoOn} class:live={autoLive}></span>
-					{autoLabel}
-				</button>
 				<button class="menu-item" onclick={() => openMenu('backtest')}>
 					<span class="menu-dot backtest"></span>백테스트
 				</button>
@@ -221,7 +214,21 @@
 					</div>
 				</div>
 
+				<div class="info-actions">
+					<button class="action-btn order" type="button" onclick={() => showOrder = true}>
+						주식주문
+					</button>
+					<button
+						class="action-btn auto"
+						class:ready={autoOn}
+						class:live={autoLive}
+						type="button"
+						onclick={() => showAuto = true}
+					>
+						<span class="action-dot"></span>{autoLabel}
+					</button>
 				</div>
+			</div>
 		{/if}
 
 		<!-- 3-Column Layout -->

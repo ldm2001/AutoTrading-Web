@@ -1,35 +1,18 @@
-# KRX 섹터 매핑 
+# 섹터 매핑 — stock_universe 에서 KRX listing 시 동시 적재된 데이터 재사용
 import logging
+from service.market.stock_universe import SECTOR_MAP, listing
 
 logger = logging.getLogger(__name__)
 
-# 종목코드 → 섹터명 매핑 캐시
-SECTOR_MAP: dict[str, str] = {}
-
-# FDR로 KOSPI/KOSDAQ 종목 섹터 로드
-def sectors():
-    global SECTOR_MAP
-    try:
-        import FinanceDataReader as fdr
-        count = 0
-        for market in ("KOSPI", "KOSDAQ"):
-            df = fdr.StockListing(market)
-            # Sector/Industry/업종 중 존재하는 컬럼 탐색
-            sec_col = next(
-                (c for c in df.columns if c in ("Sector", "Industry", "업종")),
-                None,
-            )
-            if sec_col is None:
-                logger.warning(f"{market}: 섹터 컬럼 없음 (columns={list(df.columns[:10])})")
-                continue
-            for _, row in df.iterrows():
-                code = str(row.get("Code", "")).zfill(6)
-                sector = str(row.get(sec_col, "")).strip() or "기타"
-                SECTOR_MAP[code] = sector
-                count += 1
-        logger.info(f"섹터 매핑 로드 완료: {count}개 종목")
-    except Exception as e:
-        logger.error(f"섹터 매핑 실패: {e}")
+# 섹터 매핑 확보 (listing 미실행 시 트리거, 동시성 가드는 listing 내부 락으로 처리)
+def sectors() -> None:
+    if not SECTOR_MAP:
+        listing()
+    count = len(SECTOR_MAP)
+    if count == 0:
+        logger.warning("섹터 매핑 비어있음 — KRX/네이버 모두 실패")
+    else:
+        logger.info("섹터 매핑 사용 가능: %s개 종목", count)
 
 # 종목코드로 섹터 조회, 미매핑 시 "기타"
 def label(code: str) -> str:

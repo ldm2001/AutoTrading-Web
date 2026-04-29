@@ -1,10 +1,19 @@
-# 전체 상장 종목 메타 관리 — FDR/KRX/네이버 폴백
+# 전체 상장 종목 메타 관리 — KRX(pykrx)/네이버 폴백
 import logging
+import threading
+from datetime import datetime, timedelta
 from pathlib import Path
 import requests
 import json
 
 logger = logging.getLogger(__name__)
+
+# 섹터 매핑 (code → 업종명) — KRX listing 과정에서 동시 적재
+SECTOR_MAP: dict[str, str] = {}
+
+# listing() 동시 실행 방지용 락 + 1회 로드 플래그
+_lock = threading.Lock()
+_loaded: bool = False
 
 # 기본 종목명 매핑
 NAMES: dict[str, str] = {
@@ -112,24 +121,43 @@ INDICES: dict[str, tuple[str, str]] = {
     "KPI100": ("2007", "코스피100"),
 }
 
-# KRX API로 전체 종목 가져오기 (KOSPI + KOSDAQ)
+# 최근 영업일 추적 (주말/장기 공휴일 자동 회피)
+def _recent_trading_day() -> str | None:
+    from pykrx import stock
+    # 당일은 KRX 공시 전일 수 있어 전일부터 탐색
+    d = datetime.now() - timedelta(days=1)
+    for _ in range(15):
+        ds = d.strftime("%Y%m%d")
+        try:
+            if stock.get_market_ticker_list(ds, market="KOSPI"):
+                return ds
+        except Exception as e:
+            logger.debug("trading day probe %s: %s", ds, type(e).__name__)
+        d -= timedelta(days=1)
+    return None
+
+# KRX(pykrx)로 전체 종목 + 섹터 한 번에 적재
 def _krx_listing() -> int:
+    from pykrx import stock
+    ds = _recent_trading_day()
+    if not ds:
+        return 0
     count = 0
-    for mkt_id, label in [("STK", "KOSPI"), ("KSQ", "KOSDAQ")]:
-        resp = requests.post(
-            "http://data.krx.co.kr/comm/bldAttend/getJsonData.cmd",
-            headers={"User-Agent": "Mozilla/5.0", "Referer": "http://data.krx.co.kr"},
-            data={"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": mkt_id, "share": "1", "csvxls_isNo": "false"},
-            timeout=15,
-        )
-        if not resp.ok:
+    for market in ("KOSPI", "KOSDAQ"):
+        try:
+            df = stock.get_market_sector_classifications(ds, market=market)
+        except Exception as e:
+            # 예외 메시지에 자격증명·URL이 섞일 수 있어 타입명만 기록
+            logger.warning("pykrx %s sector fetch failed: %s", market, type(e).__name__)
             continue
-        for row in resp.json().get("OutBlock_1", []):
-            code = row.get("ISU_SRT_CD", "")
-            name = row.get("ISU_ABBRV", "")
-            if not code or not name or len(code) != 6 or not code.isdigit():
+        for code, row in df.iterrows():
+            code = str(code).zfill(6)
+            name = str(row.get("종목명", "")).strip()
+            sector = str(row.get("업종명", "")).strip() or "기타"
+            if not name:
                 continue
-            ALL_STOCKS[code] = {"name": name, "market": label}
+            ALL_STOCKS[code] = {"name": name, "market": market, "sector": sector}
+            SECTOR_MAP[code] = sector
             if code not in NAMES:
                 NAMES[code] = name
             count += 1
@@ -155,7 +183,7 @@ def _naver_listing() -> int:
             if not code or not name or code in seen:
                 continue
             seen.add(code)
-            ALL_STOCKS[code] = {"name": name, "market": ""}
+            ALL_STOCKS[code] = {"name": name, "market": "", "sector": "기타"}
             count += 1
         page += 1
 
@@ -189,8 +217,8 @@ def _markets(codes: list[str]) -> None:
         market_map: dict[str, str] = {}
         for mkt_id, label in [("STK", "KOSPI"), ("KSQ", "KOSDAQ")]:
             resp = requests.post(
-                "http://data.krx.co.kr/comm/bldAttend/getJsonData.cmd",
-                headers={"User-Agent": "Mozilla/5.0", "Referer": "http://data.krx.co.kr"},
+                "https://data.krx.co.kr/comm/bldAttend/getJsonData.cmd",
+                headers={"User-Agent": "Mozilla/5.0", "Referer": "https://data.krx.co.kr"},
                 data={"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": mkt_id, "share": "1", "csvxls_isNo": "false"},
                 timeout=10,
             )
@@ -209,51 +237,47 @@ def _markets(codes: list[str]) -> None:
     except Exception:
         logger.info("KRX market resolve skipped (off-hours)")
 
-# 전체 상장 종목 메타 적재
-def listing() -> None:
-    # 1차: FDR
-    try:
-        import FinanceDataReader as fdr
-        kospi = fdr.StockListing("KOSPI")[["Code", "Name"]]
-        kosdaq = fdr.StockListing("KOSDAQ")[["Code", "Name"]]
-        for _, row in kospi.iterrows():
-            ALL_STOCKS[row["Code"]] = {"name": row["Name"], "market": "KOSPI"}
-        for _, row in kosdaq.iterrows():
-            ALL_STOCKS[row["Code"]] = {"name": row["Name"], "market": "KOSDAQ"}
-        logger.info("Loaded %s stocks via FDR", len(ALL_STOCKS))
-        return
-    except Exception as e:
-        logger.warning("FDR listing failed: %s — trying Naver fallback", e)
-
-    # 2차: KRX
-    try:
-        count = _krx_listing()
-        if count > 100:
-            logger.info("Loaded %s stocks via KRX API", count)
+# 전체 상장 종목 메타 적재 (1회 로드 + 동시성 가드)
+def listing(*, force: bool = False) -> None:
+    global _loaded
+    with _lock:
+        if _loaded and not force:
             return
-    except Exception as e:
-        logger.warning("KRX listing failed: %s — trying Naver fallback", e)
 
-    # 3차: 네이버 금융
-    try:
-        count = _naver_listing()
-        if count > 0:
-            logger.info("Loaded %s stocks via Naver API", count)
-            return
-    except Exception as e:
-        logger.warning("Naver listing failed: %s", e)
+        # 1차: KRX(pykrx) — 종목명 + 업종 동시 수집
+        try:
+            count = _krx_listing()
+            if count > 100:
+                logger.info("Loaded %s stocks via KRX (pykrx) with sectors", count)
+                _loaded = True
+                return
+            logger.warning("KRX listing returned %s — falling back to Naver", count)
+        except Exception as e:
+            logger.warning("KRX listing failed: %s — falling back to Naver", type(e).__name__)
 
-    # 3차: 하드코딩 폴백
-    for code, name in NAMES.items():
-        ALL_STOCKS[code] = {"name": name, "market": "KOSPI"}
-    logger.warning("Using hardcoded %s stocks as fallback", len(NAMES))
+        # 2차: 네이버 금융
+        try:
+            count = _naver_listing()
+            if count > 0:
+                logger.info("Loaded %s stocks via Naver API (no sector)", count)
+                _loaded = True
+                return
+        except Exception as e:
+            logger.warning("Naver listing failed: %s", type(e).__name__)
+
+        # 3차: 하드코딩 폴백
+        for code, name in NAMES.items():
+            ALL_STOCKS[code] = {"name": name, "market": "KOSPI", "sector": "기타"}
+        logger.warning("Using hardcoded %s stocks as fallback", len(NAMES))
+        _loaded = True
 
 # 코드와 이름으로 종목 검색
 def search(query: str) -> list[dict[str, str]]:
     q = query.strip().lower()
     result: list[dict[str, str]] = []
-    source = ALL_STOCKS if ALL_STOCKS else {code: {"name": name} for code, name in NAMES.items()}
-    for code, info in source.items():
+    # listing() 동시 수정에 대비해 스냅샷으로 순회 (RuntimeError 방지)
+    source = list(ALL_STOCKS.items()) if ALL_STOCKS else [(c, {"name": n}) for c, n in NAMES.items()]
+    for code, info in source:
         name = info["name"]
         aliases = ALIASES.get(code, [])
         if q in name.lower() or q in code or any(q in alias for alias in aliases):
@@ -261,12 +285,15 @@ def search(query: str) -> list[dict[str, str]]:
         if len(result) >= 20:
             break
 
-    # 로컬 결과 없으면 네이버 자동완성으로 폴백
+    # 로컬 결과 없으면 네이버 자동완성으로 폴백 (params= 사용으로 인젝션 차단)
     if not result:
         try:
-            import requests
-            url = f"https://ac.stock.naver.com/ac?q={query.strip()}&target=stock"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            resp = requests.get(
+                "https://ac.stock.naver.com/ac",
+                params={"q": query.strip(), "target": "stock"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=5,
+            )
             if resp.ok:
                 for item in resp.json().get("items", []):
                     if item.get("nationCode") == "KOR":

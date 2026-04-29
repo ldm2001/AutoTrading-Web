@@ -193,6 +193,109 @@
 	50% { opacity: 0.45; }
 }
 
+/* --- Info Bar Primary Actions --- */
+.info-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.4375rem;
+	flex-shrink: 0;
+	padding-left: 0.75rem;
+	margin-left: 0.25rem;
+	border-left: 1px solid #e5e7eb;
+	height: 1.75rem;
+}
+
+.action-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4375rem;
+	height: 1.75rem;
+	padding: 0 0.875rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	border-radius: 0.375rem;
+	border: 1px solid transparent;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+	white-space: nowrap;
+	font-family: inherit;
+}
+
+.action-btn:active {
+	transform: translateY(1px);
+}
+
+/* 주식주문: 핵심 액션 — solid dark */
+.action-btn.order {
+	background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+	color: #ffffff;
+	border-color: #0f172a;
+	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.action-btn.order:hover {
+	background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
+	box-shadow: 0 2px 4px rgba(15, 23, 42, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 자동매매 기본 (MANUAL) — neutral filled */
+.action-btn.auto {
+	background: #f3f4f6;
+	color: #374151;
+	border-color: #d1d5db;
+}
+
+.action-btn.auto:hover {
+	background: #e5e7eb;
+	border-color: #9ca3af;
+}
+
+/* READY: 워치리스트 등록됨, 엔진 OFF */
+.action-btn.auto.ready {
+	background: #fff7ed;
+	color: #9a3412;
+	border-color: #fdba74;
+}
+
+.action-btn.auto.ready:hover {
+	background: #ffedd5;
+	border-color: #fb923c;
+}
+
+/* LIVE: 자동매매 실행 중 */
+.action-btn.auto.live {
+	background: #ecfdf5;
+	color: #065f46;
+	border-color: #6ee7b7;
+	box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
+}
+
+.action-btn.auto.live:hover {
+	background: #d1fae5;
+	border-color: #34d399;
+}
+
+.action-dot {
+	width: 0.4375rem;
+	height: 0.4375rem;
+	border-radius: 50%;
+	background: #9ca3af;
+	flex-shrink: 0;
+}
+
+.action-btn.auto.ready .action-dot {
+	background: #f97316;
+	box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+}
+
+.action-btn.auto.live .action-dot {
+	background: #10b981;
+	box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+	animation: pulse-live 1.4s ease-in-out infinite;
+}
+
 /* --- 3-Column Grid --- */
 .main-grid {
 	flex: 1;
