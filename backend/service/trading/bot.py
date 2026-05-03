@@ -8,6 +8,7 @@ from config import settings
 from service.discord import notify
 from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
+from service.trading.research import wfin, wfout
 from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
 from service.trading.strategy import evaluate, sl
 from service.market.tick_queue import TickQueue, tick_q
@@ -202,6 +203,9 @@ class Bot:
             cp = int(info.get("current_price", 0))
             await self.rec(code, name, "sell", qty, cp, result["success"])
             if result["success"]:
+                avg = int(info.get("avg_price") or tracked.get("avg_price") or 0)
+                pnl = ((cp - avg) / avg * 100) if avg > 0 else None
+                wfout(code, "eod", cp, qty, pnl)
                 self.drop(code)
             else:
                 self.bought[code] = self.acct(code, info)
@@ -220,7 +224,7 @@ class Bot:
             await self.msg(f"[시장 국면] {state} — {regime['reason']}")
         return bool(regime["allow_new_buys"])
 
-    # ── 손절/익절 모니터링 (동적 손절 지원) ──
+    # 손절/익절 모니터링 (동적 손절 지원)
     async def risk(self) -> None:
         for code, info in list(self.bought.items()):
             try:
@@ -239,6 +243,7 @@ class Bot:
                     cp = await self.broker.raw(code)
                     await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
+                        wfout(code, "stop", cp, info["qty"], pnl)
                         self.drop(code)
                     continue
 
@@ -251,6 +256,7 @@ class Bot:
                     cp = await self.broker.raw(code)
                     await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
+                        wfout(code, "profit", cp, info["qty"], pnl)
                         self.drop(code)
 
             except Exception as e:
@@ -299,6 +305,8 @@ class Bot:
             order = await self.broker.buy(sym, qty)
             name = self.names.get(sym, sym)
             if order["success"]:
+                # walk-forward: 매수 진입 시점의 평가 결과 누적
+                wfin(sym, result, qty)
                 pos = await self.pos(sym, sp)
                 if not pos:
                     keep_pending = True
