@@ -335,6 +335,22 @@
 		align-items: stretch;
 	}
 
+	/* 컬럼 전환 시 좌측 구분선이 어색해지므로 상단 구분선으로 전환 + 버튼 균등 분할 */
+	.info-actions {
+		padding-left: 0;
+		margin-left: 0;
+		border-left: none;
+		padding-top: 0.5rem;
+		margin-top: 0.25rem;
+		border-top: 1px solid #e5e7eb;
+		height: auto;
+		width: 100%;
+	}
+
+	.info-actions .action-btn {
+		flex: 1;
+	}
+
 	.auto-grid {
 		grid-template-columns: 1fr;
 	}
