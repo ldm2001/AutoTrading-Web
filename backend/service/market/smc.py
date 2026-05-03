@@ -7,26 +7,26 @@ _OPEN  = datetime.time(9, 0)
 _CLOSE = datetime.time(15, 30)
 
 # 평일 장중(09:00~15:30) 여부
-def is_intraday(dt: datetime.datetime) -> bool:
+def intra(dt: datetime.datetime) -> bool:
     return dt.weekday() < 5 and _OPEN <= dt.time() <= _CLOSE
 
 # 동일 거래일 여부 — 오버나잇 갭 FVG 오인 방지
-def same_session(a: datetime.datetime, b: datetime.datetime) -> bool:
+def same(a: datetime.datetime, b: datetime.datetime) -> bool:
     return a.date() == b.date()
 
 # 장외 캔들 제거 (09:00 이전/15:30 이후)
-def intraday_only(candles: list[dict]) -> list[dict]:
-    return [c for c in candles if is_intraday(c["time"])]
+def daybar(candles: list[dict]) -> list[dict]:
+    return [c for c in candles if intra(c["time"])]
 
 # COI 근사값, 기관 방향성 프록시
-def _body_ratio(c: dict) -> float:
+def body(c: dict) -> float:
     rng = c["high"] - c["low"]
     if rng == 0:
         return 0.0
     return (c["close"] - c["open"]) / rng
 
 # FVG 탐지 — Bullish: prev.high < nxt.low, Bearish: prev.low > nxt.high, 동일 세션만 유효
-def fvg_zones(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
+def fvgz(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
     n = len(candles)
     result: list[dict] = []
 
@@ -35,8 +35,8 @@ def fvg_zones(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
 
         # 오버나잇 갭을 FVG로 오인하지 않음
         if "time" in mid:
-            if not (same_session(prev["time"], mid["time"]) and
-                    same_session(mid["time"], nxt["time"])):
+            if not (same(prev["time"], mid["time"]) and
+                    same(mid["time"], nxt["time"])):
                 continue
 
         is_bull = mid["close"] > mid["open"]
@@ -84,7 +84,7 @@ def fvg_zones(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
     return result
 
 # 스윙 고저 탐지 — 전후 swing_length 캔들 대비 극값, 연속 중복 제거
-def swing_hl(candles: list[dict], swing_length: int = 5) -> list[dict]:
+def swing(candles: list[dict], swing_length: int = 5) -> list[dict]:
     n     = len(candles)
     highs = np.array([c["high"] for c in candles], dtype=float)
     lows  = np.array([c["low"]  for c in candles], dtype=float)
@@ -113,8 +113,8 @@ def swing_hl(candles: list[dict], swing_length: int = 5) -> list[dict]:
     return cleaned
 
 # OB 탐지 — 스윙 돌파 직전 최저저가(Bullish)/최고고가(Bearish) 캔들, strength=body_ratio
-def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
-    swings  = swing_hl(candles, swing_length)
+def obz(candles: list[dict], swing_length: int = 5) -> list[dict]:
+    swings  = swing(candles, swing_length)
     n       = len(candles)
     result: list[dict] = []
     crossed: set[int]  = set()
@@ -136,7 +136,7 @@ def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
 
                 # 분봉: 동일 세션 체크
                 if "time" in ob_c:
-                    if not same_session(ob_c["time"], candles[j]["time"]):
+                    if not same(ob_c["time"], candles[j]["time"]):
                         break
 
                 result.append({
@@ -145,7 +145,7 @@ def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
                     "bottom":    float(ob_c["low"]),
                     "index":     ob_i,
                     "label":     str(ob_c.get("date", ob_c.get("time", ob_i))),
-                    "strength":  abs(_body_ratio(ob_c)),
+                    "strength":  abs(body(ob_c)),
                     "mitigated": False,
                 })
                 break
@@ -166,7 +166,7 @@ def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
                 ob_i = li + 1 + seg.index(ob_c)
 
                 if "time" in ob_c:
-                    if not same_session(ob_c["time"], candles[j]["time"]):
+                    if not same(ob_c["time"], candles[j]["time"]):
                         break
 
                 result.append({
@@ -175,7 +175,7 @@ def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
                     "bottom":    float(ob_c["low"]),
                     "index":     ob_i,
                     "label":     str(ob_c.get("date", ob_c.get("time", ob_i))),
-                    "strength":  abs(_body_ratio(ob_c)),
+                    "strength":  abs(body(ob_c)),
                     "mitigated": False,
                 })
                 break
@@ -183,8 +183,8 @@ def ob_zones(candles: list[dict], swing_length: int = 5) -> list[dict]:
     return result
 
 # BOS/CHoCH 탐지 — 마지막 4개 스윙 패턴으로 추세 지속(BOS)/전환(CHoCH) 판단
-def structure_break(candles: list[dict], swing_length: int = 5) -> dict:
-    swings = swing_hl(candles, swing_length)
+def bos(candles: list[dict], swing_length: int = 5) -> dict:
+    swings = swing(candles, swing_length)
     if len(swings) < 4:
         return {"bos": 0, "choch": 0, "level": 0.0}
 
@@ -225,20 +225,20 @@ def mitigate(zones: list[dict], price: float) -> None:
             z["mitigated"] = True
 
 # 미완화 구간만 반환
-def active_zones(zones: list[dict]) -> list[dict]:
+def livez(zones: list[dict]) -> list[dict]:
     return [z for z in zones if not z["mitigated"]]
 
 # 현재가 가장 근접 미완화 구간
-def _nearest_zone(zones: list[dict], price: float) -> dict | None:
-    active = active_zones(zones)
+def near(zones: list[dict], price: float) -> dict | None:
+    active = livez(zones)
     if not active:
         return None
     return min(active, key=lambda z: abs(price - (z["top"] + z["bottom"]) / 2))
 
 # FVG 근접도 점수 (-8~+8) — Bullish 내부/근접 양수, Bearish 음수
-def fvg_score(candles: list[dict], price: float) -> tuple[float, str]:
-    fvgs = fvg_zones(candles)
-    z    = _nearest_zone(fvgs, price)
+def fvg(candles: list[dict], price: float) -> tuple[float, str]:
+    fvgs = fvgz(candles)
+    z    = near(fvgs, price)
     if z is None:
         return 0.0, "FVG 없음"
 
@@ -265,9 +265,9 @@ def fvg_score(candles: list[dict], price: float) -> tuple[float, str]:
 
 
 # OB 지지/저항 점수 (-7~+7) — strength(body_ratio) 가중, Bullish 양수, Bearish 음수
-def ob_score(candles: list[dict], price: float) -> tuple[float, str]:
-    obs = ob_zones(candles)
-    z   = _nearest_zone(obs, price)
+def ob(candles: list[dict], price: float) -> tuple[float, str]:
+    obs = obz(candles)
+    z   = near(obs, price)
     if z is None:
         return 0.0, "Order Block 없음"
 
@@ -296,8 +296,8 @@ def ob_score(candles: list[dict], price: float) -> tuple[float, str]:
 
 
 # BOS/CHoCH 구조 점수 (-5~+5) — BOS 추세 지속, CHoCH 전환 경고
-def structure_score(candles: list[dict]) -> tuple[float, str]:
-    sb = structure_break(candles)
+def struct(candles: list[dict]) -> tuple[float, str]:
+    sb = bos(candles)
 
     if sb["bos"] == 1:
         return 5.0, f"Bullish BOS 확인 (레벨 {sb['level']:,.0f})"
@@ -310,11 +310,11 @@ def structure_score(candles: list[dict]) -> tuple[float, str]:
     return 0.0, "구조 중립"
 
 # 분봉 FVG 점수 — 15분봉에서 최신 미완화 FVG 지지/저항 점수 + 존 반환
-def fvg_intraday(candles_15m: list[dict], price: float) -> tuple[float, str, dict | None]:
+def fvgin(candles_15m: list[dict], price: float) -> tuple[float, str, dict | None]:
     if len(candles_15m) < 5:
         return 0.0, "분봉 데이터 부족", None
-    fvgs = fvg_zones(candles_15m)
-    active = active_zones(fvgs)
+    fvgs = fvgz(candles_15m)
+    active = livez(fvgs)
     if not active:
         return 0.0, "분봉 FVG 없음", None
     z = min(active, key=lambda z: abs(price - (z["top"] + z["bottom"]) / 2))
@@ -339,9 +339,9 @@ def fvg_intraday(candles_15m: list[dict], price: float) -> tuple[float, str, dic
 
 
 # FVG 기반 구조적 손절가 — 가장 가까운 Bullish FVG 하단 (지지선)
-def structural_stop(candles: list[dict], price: float) -> float | None:
-    fvgs = fvg_zones(candles)
-    bull_below = [z for z in active_zones(fvgs)
+def stop(candles: list[dict], price: float) -> float | None:
+    fvgs = fvgz(candles)
+    bull_below = [z for z in livez(fvgs)
                   if z["kind"] == "bullish" and z["bottom"] < price]
     if not bull_below:
         return None
@@ -349,13 +349,13 @@ def structural_stop(candles: list[dict], price: float) -> float | None:
 
 
 # SMC 전체 분석 요약 — fvg/ob/str 점수 + active 구간 수
-def analysis(candles: list[dict], price: float) -> dict:
-    fvg_s, fvg_r = fvg_score(candles, price)
-    ob_s,  ob_r  = ob_score(candles, price)
-    str_s, str_r = structure_score(candles)
+def scan(candles: list[dict], price: float) -> dict:
+    fvg_s, fvg_r = fvg(candles, price)
+    ob_s,  ob_r  = ob(candles, price)
+    str_s, str_r = struct(candles)
 
-    fvgs = fvg_zones(candles)
-    obs  = ob_zones(candles)
+    fvgs = fvgz(candles)
+    obs  = obz(candles)
 
     return {
         "fvg_score":   round(fvg_s, 1),
@@ -365,6 +365,6 @@ def analysis(candles: list[dict], price: float) -> dict:
         "str_score":   round(str_s, 1),
         "str_reason":  str_r,
         "total":       round(fvg_s + ob_s + str_s, 1),
-        "active_fvgs": len(active_zones(fvgs)),
-        "active_obs":  len(active_zones(obs)),
+        "active_fvgs": len(livez(fvgs)),
+        "active_obs":  len(livez(obs)),
     }

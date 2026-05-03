@@ -3,7 +3,7 @@ import { writable } from 'svelte/store';
 export const priceConnected = writable(false);
 export const tradeConnected = writable(false);
 
-function createWs(path: string, connectedStore: typeof priceConnected) {
+function sock(path: string, connectedStore: typeof priceConnected) {
 	let ws: WebSocket | null = null;
 	let reconnectTimer: ReturnType<typeof setTimeout>;
 	let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -15,7 +15,7 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 	const pendingMessages: Map<string, unknown> = new Map();
 	let rafId: number | null = null;
 
-	function flushMessages() {
+	function flush() {
 		rafId = null;
 		for (const [type, msg] of pendingMessages) {
 			const fns = handlers.get(type);
@@ -24,15 +24,15 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 		pendingMessages.clear();
 	}
 
-	function queueMessage(msg: { type: string; [key: string]: unknown }) {
+	function qmsg(msg: { type: string; [key: string]: unknown }) {
 		// 같은 타입은 최신 메시지로 덮어씀 (배칭)
 		pendingMessages.set(msg.type, msg);
 		if (rafId === null) {
-			rafId = requestAnimationFrame(flushMessages);
+			rafId = requestAnimationFrame(flush);
 		}
 	}
 
-	function getUrl() {
+	function url() {
 		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 		return `${proto}://${location.host}${path}`;
 	}
@@ -40,7 +40,7 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 	function connect() {
 		if (ws?.readyState === WebSocket.OPEN) return;
 
-		ws = new WebSocket(getUrl());
+		ws = new WebSocket(url());
 
 		ws.onopen = () => {
 			connectedStore.set(true);
@@ -60,7 +60,7 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 					if (fns) for (const fn of fns) fn(msg);
 				} else {
 					// price_update 등은 프레임 배칭
-					queueMessage(msg);
+					qmsg(msg);
 				}
 			} catch {
 				// ignore non-JSON
@@ -96,5 +96,5 @@ function createWs(path: string, connectedStore: typeof priceConnected) {
 	return { connect, on, close };
 }
 
-export const priceWs = createWs('/ws/prices', priceConnected);
-export const tradeWs = createWs('/ws/trades', tradeConnected);
+export const priceWs = sock('/ws/prices', priceConnected);
+export const tradeWs = sock('/ws/trades', tradeConnected);

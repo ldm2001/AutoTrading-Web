@@ -4,7 +4,7 @@ import type { PredictionResult } from '$lib/types';
 export const prediction = writable<PredictionResult | null>(null);
 export const predictionLoading = writable(false);
 
-export async function fetchPrediction(code: string): Promise<void> {
+export async function predq(code: string): Promise<void> {
 	predictionLoading.set(true);
 	prediction.set(null);
 	try {

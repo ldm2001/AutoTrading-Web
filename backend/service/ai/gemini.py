@@ -24,7 +24,7 @@ class GeminiClient:
             logger.info("Gemini API key not set - AI features disabled")
 
     # Gemini API 호출 — 텍스트 응답 반환
-    async def _generate(self, prompt: str) -> str | None:
+    async def txt(self, prompt: str) -> str | None:
         if not self.enabled:
             return None
         try:
@@ -35,8 +35,8 @@ class GeminiClient:
             return None
 
     # Gemini API 호출 — JSON 파싱 후 dict 반환
-    async def _generate_json(self, prompt: str) -> dict | None:
-        text = await self._generate(prompt)
+    async def js(self, prompt: str) -> dict | None:
+        text = await self.txt(prompt)
         if not text:
             return None
         try:
@@ -84,7 +84,7 @@ class GeminiClient:
 }}
 ```"""
 
-        result = await self._generate_json(prompt)
+        result = await self.js(prompt)
         if result:
             _cache.set(cache_key, result, 60)
         return result
@@ -121,7 +121,7 @@ class GeminiClient:
 }}
 ```"""
 
-        result = await self._generate_json(prompt)
+        result = await self.js(prompt)
         if result:
             _cache.set(cache_key, result, 300)
         return result
@@ -184,7 +184,7 @@ class GeminiClient:
 - {"다음 개장일" if not market_open else "내일"} 전략 제안 (2-3줄)
 - 한국어로 작성"""
 
-        result = await self._generate(prompt)
+        result = await self.txt(prompt)
         if result:
             _cache.set(cache_key, result, 3600)
         return result

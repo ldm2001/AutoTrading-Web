@@ -7,8 +7,9 @@ from collections.abc import Callable
 from config import settings
 from service.discord import notify
 from service.kis import KIS, NAMES, kis
-from service.trading.order_log import append as order_log_append, rows as order_log_rows
-from service.trading.strategy import evaluate, stop_loss
+from service.trading.regime import regime as regime_state
+from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
+from service.trading.strategy import evaluate, sl
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
 from service.event_bus import bus
@@ -33,6 +34,8 @@ class Bot:
         self.scan = scan
         self.running: bool = False
         self.bought: dict[str, dict] = {} # {"avg_price": int, "qty": int, "name": str}
+        self.pending_buys: set[str] = set()
+        self.pending_stops: dict[str, float] = {}
         self.logs: list[dict] = []
         self._task: asyncio.Task | None = None
         self.on_message: Callable | None = None
@@ -40,9 +43,10 @@ class Bot:
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
+        self._last_regime_state: str | None = None
 
     # Redis에 봇 보유 상태 저장
-    def _snapshot(self) -> None:
+    def snap(self) -> None:
         r = self.broker.cache.redis
         if r is None:
             return
@@ -52,7 +56,7 @@ class Bot:
             logger.warning("Bot state save failed: %s", e)
 
     # Redis에서 봇 보유 상태 복원
-    def _recovery(self) -> None:
+    def redo(self) -> None:
         r = self.broker.cache.redis
         if r is None:
             return
@@ -70,19 +74,21 @@ class Bot:
             return
         self.running = True
         self.bought = {}
-        self._recovery()
-        self.logs = order_log_rows()
+        self.pending_buys = set()
+        self.pending_stops = {}
+        self.redo()
+        self.logs = trade_log_rows()
         await self.queue.start()
 
         # 이벤트 버스 구독 — tick 이벤트로 보유종목 실시간 체크
-        def _on_tick(_event: str, data: dict) -> None:
+        def tickcb(_event: str, data: dict) -> None:
             if data and data.get("code") in self.bought:
                 self._last_tick_code = data["code"]
                 self._tick_event.set()
-        self._unsub_tick = bus.on("tick", _on_tick)
+        self._unsub_tick = bus.on("tick", tickcb)
 
-        self._task = asyncio.create_task(self._run())
-        await self._msg("=== 자동매매 시작 ===")
+        self._task = asyncio.create_task(self.loop())
+        await self.msg("=== 자동매매 시작 ===")
 
     # 봇 중지 — tick 핸들러 해제 후 봇 루프 종료
     async def stop(self) -> None:
@@ -93,7 +99,7 @@ class Bot:
         if self._task:
             self._task.cancel()
             self._task = None
-        await self._msg("=== 자동매매 종료 ===")
+        await self.msg("=== 자동매매 종료 ===")
 
     # 현재 봇 상태 반환 (실행 여부, 보유 종목, 오늘 거래 내역)
     def status(self) -> dict:
@@ -108,11 +114,12 @@ class Bot:
                 "stop_loss_pct": settings.stop_loss_pct,
                 "take_profit_pct": settings.take_profit_pct,
                 "buy_score_threshold": settings.buy_score_threshold,
+                "market_filter": "risk_off 신규매수 차단",
             },
         }
 
     # 로그 출력 + Discord 알림 + WebSocket 메시지 전송
-    async def _msg(self, text: str) -> None:
+    async def msg(self, text: str) -> None:
         logger.info(text)
         await notify(text)
         if self.on_message:
@@ -120,7 +127,7 @@ class Bot:
             await self.on_message(f"[{now}] {text}")
 
     # 거래 내역 기록 — 파일 저장 + WebSocket 이벤트 발행
-    async def _log(
+    async def rec(
         self, code: str, name: str, kind: str, qty: int, price: int, ok: bool
     ) -> None:
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -135,51 +142,126 @@ class Bot:
             "message": "성공" if ok else "실패",
         }
         self.logs.append(entry)
-        order_log_append(entry)
-        self._snapshot()
+        trade_log_append(entry)
+        self.snap()
         action = "매수" if kind == "buy" else "매도"
-        await self._msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
+        await self.msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
         if self.on_trade:
             await self.on_trade(entry)
 
+    def acct(self, code: str, info: dict, stop_price: float | None = None) -> dict:
+        pos = {
+            "avg_price": int(info.get("avg_price", 0)),
+            "qty": int(info.get("qty", 0)),
+            "name": info.get("name") or self.names.get(code, code),
+        }
+        if stop_price is not None:
+            pos["stop_price"] = stop_price
+        elif code in self.bought and self.bought[code].get("stop_price") is not None:
+            pos["stop_price"] = self.bought[code]["stop_price"]
+        return pos
+
+    def drop(self, code: str) -> None:
+        if code in self.bought:
+            del self.bought[code]
+            self.snap()
+
+    async def pos(self, code: str, stop_price: float | None = None) -> dict | None:
+        items, _ = await self.broker.holdings()
+        info = items.get(code)
+        if not info:
+            return None
+        self.bought[code] = self.acct(code, info, stop_price)
+        self.pending_buys.discard(code)
+        self.pending_stops.pop(code, None)
+        self.snap()
+        return self.bought[code]
+
+    async def pend(self) -> None:
+        if not self.pending_buys:
+            return
+        items, _ = await self.broker.holdings()
+        for code in list(self.pending_buys):
+            info = items.get(code)
+            if info:
+                self.bought[code] = self.acct(code, info, self.pending_stops.get(code))
+                self.pending_buys.discard(code)
+                self.pending_stops.pop(code, None)
+        self.snap()
+
+    async def sellpos(self) -> None:
+        items, _ = await self.broker.holdings()
+        for code, tracked in list(self.bought.items()):
+            info = items.get(code, tracked)
+            qty = int(info.get("qty") or tracked.get("qty") or 0)
+            if qty <= 0:
+                self.drop(code)
+                continue
+            name = info.get("name") or tracked.get("name") or self.names.get(code, code)
+            result = await self.broker.sell(code, qty)
+            cp = int(info.get("current_price", 0))
+            await self.rec(code, name, "sell", qty, cp, result["success"])
+            if result["success"]:
+                self.drop(code)
+            else:
+                self.bought[code] = self.acct(code, info)
+                self.snap()
+
+    async def gate(self) -> bool:
+        try:
+            regime = regime_state(await self.broker.indices())
+        except Exception as e:
+            logger.warning("Market regime check failed: %s", e)
+            return True
+
+        state = regime["state"]
+        if state != self._last_regime_state:
+            self._last_regime_state = state
+            await self.msg(f"[시장 국면] {state} — {regime['reason']}")
+        return bool(regime["allow_new_buys"])
+
     # ── 손절/익절 모니터링 (동적 손절 지원) ──
-    async def _holdings(self) -> None:
+    async def risk(self) -> None:
         for code, info in list(self.bought.items()):
             try:
                 sp = info.get("stop_price")
-                should_stop, pnl = await stop_loss(
+                should_stop, pnl = await sl(
                     code, info["avg_price"],
                     structural_price=sp,
                     fallback_pct=settings.stop_loss_pct,
                 )
                 if should_stop:
                     label = f"구조적 {sp:,.0f}" if sp else f"{settings.stop_loss_pct}%"
-                    await self._msg(
+                    await self.msg(
                         f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
                     )
                     result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.price_raw(code)
-                    await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
+                    cp = await self.broker.raw(code)
+                    await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
-                        del self.bought[code]
+                        self.drop(code)
                     continue
 
                 # 익절 체크
                 if pnl >= settings.take_profit_pct:
-                    await self._msg(
+                    await self.msg(
                         f"[익절] {info['name']}({code}) 수익률 +{pnl:.2f}% ≥ +{settings.take_profit_pct}%"
                     )
                     result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.price_raw(code)
-                    await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
+                    cp = await self.broker.raw(code)
+                    await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
-                        del self.bought[code]
+                        self.drop(code)
 
             except Exception as e:
                 logger.error(f"Holdings check error ({code}): {e}")
 
     # 멀티팩터 매수 판단 
-    async def _entry(self, sym: str, buy_amount: float) -> None:
+    async def ent(self, sym: str, buy_amount: float) -> None:
+        if sym in self.bought or sym in self.pending_buys:
+            return
+        keep_pending = False
+        self.pending_buys.add(sym)
         try:
             # 예측 데이터
             prediction = None
@@ -205,44 +287,42 @@ class Bot:
 
             # 팩터 요약 로그
             factor_strs = [f"{f['name']}={f['score']:+.0f}" for f in result["factors"] if f["score"] != 0]
-            await self._msg(
+            await self.msg(
                 f"[매수 시그널] {sym} 스코어={score:+.0f} ({', '.join(factor_strs)})"
             )
 
             # 동적 손절가 로그
             sp = result.get("stop_price")
             if sp:
-                await self._msg(f"  → 구조적 손절가: {sp:,.0f}원")
+                await self.msg(f"  → 구조적 손절가: {sp:,.0f}원")
 
             order = await self.broker.buy(sym, qty)
+            name = self.names.get(sym, sym)
             if order["success"]:
-                name = self.names.get(sym, sym)
-                self.bought[sym] = {
-                    "avg_price": cp, "qty": qty, "name": name,
-                    "stop_price": sp,
-                }
-            await self._log(sym, "", "buy", qty, cp, order["success"])
+                pos = await self.pos(sym, sp)
+                if not pos:
+                    keep_pending = True
+                    if sp is not None:
+                        self.pending_stops[sym] = sp
+                    await self.msg(f"[매수 접수] {name}({sym}) 체결 잔고 반영 대기")
+            await self.rec(sym, name, "buy", qty, cp, order["success"])
 
         except Exception as e:
             logger.error(f"Buy check error ({sym}): {e}")
+        finally:
+            if not keep_pending:
+                self.pending_buys.discard(sym)
+                self.pending_stops.pop(sym, None)
 
     # 메인 루프 
-    async def _run(self) -> None:
+    async def loop(self) -> None:
         try:
             total_cash = await self.broker.cash()
             items, evaluation = await self.broker.holdings()
 
-            # 기존 보유 종목 등록
-            for code, info in items.items():
-                self.bought[code] = {
-                    "avg_price": info["avg_price"],
-                    "qty": info["qty"],
-                    "name": info["name"],
-                }
-
             buy_amount = total_cash * settings.buy_percent
 
-            await self._msg("==== 보유잔고 ====")
+            await self.msg("==== 보유잔고 ====")
             if items:
                 for code, info in items.items():
                     name = info["name"]
@@ -251,19 +331,19 @@ class Bot:
                     cur = info.get("current_price", 0)
                     eval_amt = info.get("eval_amount", cur * qty)
                     pnl = info.get("profit_loss_percent", 0)
-                    await self._msg(
+                    await self.msg(
                         f"  {name}({code}) {qty}주 | "
                         f"매입 {avg:,}원 → 현재 {cur:,}원 | "
                         f"평가 {eval_amt:,}원 ({pnl:+.2f}%)"
                     )
             else:
-                await self._msg("  보유 종목 없음")
-            await self._msg(f"주식 평가: {int(evaluation.get('scts_evlu_amt', '0')):,}원")
-            await self._msg(f"평가 손익: {int(evaluation.get('evlu_pfls_smtl_amt', '0')):,}원")
-            await self._msg(f"총 평가: {int(evaluation.get('tot_evlu_amt', '0')):,}원")
-            await self._msg(f"매수 가능: {total_cash:,}원 (종목당 {buy_amount:,.0f}원)")
-            await self._msg(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절=FVG동적(폴백{settings.stop_loss_pct}%), 익절+{settings.take_profit_pct}%)")
-            await self._msg("==================")
+                await self.msg("  보유 종목 없음")
+            await self.msg(f"주식 평가: {int(evaluation.get('scts_evlu_amt', '0')):,}원")
+            await self.msg(f"평가 손익: {int(evaluation.get('evlu_pfls_smtl_amt', '0')):,}원")
+            await self.msg(f"총 평가: {int(evaluation.get('tot_evlu_amt', '0')):,}원")
+            await self.msg(f"매수 가능: {total_cash:,}원 (종목당 {buy_amount:,.0f}원)")
+            await self.msg(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절=FVG동적(폴백{settings.stop_loss_pct}%), 익절+{settings.take_profit_pct}%)")
+            await self.msg("==================")
 
             soldout = False
             last_eval_min = -1
@@ -276,7 +356,7 @@ class Bot:
                 t_exit = now.replace(hour=15, minute=20, second=0, microsecond=0)
 
                 if now.weekday() >= 5:
-                    await self._msg("주말이므로 프로그램을 종료합니다.")
+                    await self.msg("주말이므로 프로그램을 종료합니다.")
                     break
 
                 # 매매 시간대 (09:05 ~ 15:15)
@@ -284,18 +364,23 @@ class Bot:
 
                     # 손절/익절 체크 (30초마다)
                     if self.bought and now.second < 10:
-                        await self._holdings()
+                        await self.risk()
 
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
                         last_eval_min = now.minute
+                        if not await self.gate():
+                            continue
+                        await self.pend()
+                        total_cash = await self.broker.cash()
+                        buy_amount = total_cash * settings.buy_percent
                         scan_list = self.scan()
                         for sym in scan_list:
                             if len(self.bought) >= settings.target_buy_count:
                                 break
-                            if sym in self.bought:
+                            if sym in self.bought or sym in self.pending_buys:
                                 continue
-                            await self._entry(sym, buy_amount)
+                            await self.ent(sym, buy_amount)
                             await asyncio.sleep(1)
 
                     # 30분마다 잔고 갱신
@@ -304,17 +389,12 @@ class Bot:
 
                 # 장 마감 전 일괄 매도
                 if t_sell < now < t_exit and not soldout:
-                    await self._msg("[장마감] 보유 종목 일괄 매도")
-                    items, _ = await self.broker.holdings()
-                    for code, info in items.items():
-                        result = await self.broker.sell(code, info["qty"])
-                        cp = info.get("current_price", 0)
-                        await self._log(code, info["name"], "sell", info["qty"], cp, result["success"])
+                    await self.msg("[장마감] 보유 종목 일괄 매도")
+                    await self.sellpos()
                     soldout = True
-                    self.bought = {}
 
                 if now > t_exit:
-                    await self._msg("프로그램을 종료합니다.")
+                    await self.msg("프로그램을 종료합니다.")
                     break
 
                 # 이벤트 드리븐: tick 이벤트 또는 5초 타임아웃
@@ -327,7 +407,7 @@ class Bot:
         except asyncio.CancelledError:
             logger.info("Bot cancelled")
         except Exception as e:
-            await self._msg(f"[오류 발생] {e}")
+            await self.msg(f"[오류 발생] {e}")
             logger.exception("Bot error")
         finally:
             self.running = False

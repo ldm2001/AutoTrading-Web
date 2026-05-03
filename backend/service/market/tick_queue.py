@@ -27,13 +27,13 @@ class TickQueue:
         self._use_kafka = False
 
     # asyncio.Queue 인스턴스 생성 (렊은 초기화)
-    def _queue(self) -> asyncio.Queue:
+    def q(self) -> asyncio.Queue:
         if self._q is None:
             self._q = asyncio.Queue(maxsize=self._maxsize)
         return self._q
 
     # Kafka 연결 시도
-    async def _kafka(self) -> bool:
+    async def kafka(self) -> bool:
         try:
             from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
             self._producer = AIOKafkaProducer(
@@ -84,7 +84,7 @@ class TickQueue:
                 logger.warning("Kafka produce failed, fallback to queue: %s", e)
 
         # asyncio.Queue 폴백
-        q = self._queue()
+        q = self.q()
         try:
             q.put_nowait(tick)
         except asyncio.QueueFull:
@@ -96,7 +96,7 @@ class TickQueue:
             q.put_nowait(tick)
 
     # consumer 핸들러 등록
-    def on_tick(self, handler: Callable) -> None:
+    def ontick(self, handler: Callable) -> None:
         self._handlers.append(handler)
 
     # consumer 루프 시작
@@ -104,11 +104,11 @@ class TickQueue:
         if self._running:
             return
         self._running = True
-        await self._kafka()
+        await self.kafka()
         if self._use_kafka:
-            self._task = asyncio.create_task(self._kafka_loop())
+            self._task = asyncio.create_task(self.kloop())
         else:
-            self._task = asyncio.create_task(self._queue_loop())
+            self._task = asyncio.create_task(self.qloop())
         logger.info("TickQueue consumer started (kafka=%s)", self._use_kafka)
 
     # consumer 루프 중지
@@ -136,7 +136,7 @@ class TickQueue:
         logger.info("TickQueue consumer stopped")
 
     # 틱 처리 공통 로직
-    async def _process(self, tick: dict) -> None:
+    async def proc(self, tick: dict) -> None:
         code = tick["code"]
         price = tick["price"]
         volume = tick["volume"]
@@ -166,12 +166,12 @@ class TickQueue:
         await bus.emit("tick", {"code": code, "price": price, "volume": volume})
 
     # Kafka consumer 루프
-    async def _kafka_loop(self) -> None:
+    async def kloop(self) -> None:
         try:
             async for msg in self._consumer:
                 if not self._running:
                     break
-                await self._process(msg.value)
+                await self.proc(msg.value)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -180,8 +180,8 @@ class TickQueue:
             self._running = False
 
     # asyncio.Queue consumer 루프 (폴백)
-    async def _queue_loop(self) -> None:
-        q = self._queue()
+    async def qloop(self) -> None:
+        q = self.q()
         try:
             while self._running:
                 try:
@@ -189,7 +189,7 @@ class TickQueue:
                 except TimeoutError:
                     continue
                 tick_queue_size.set(q.qsize())
-                await self._process(tick)
+                await self.proc(tick)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -211,7 +211,7 @@ class TickQueue:
 
     # Kafka 연결 상태 반환
     @property
-    def kafka_enabled(self) -> bool:
+    def kafkaon(self) -> bool:
         return self._use_kafka
 
 

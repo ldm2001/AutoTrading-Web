@@ -7,17 +7,16 @@
 		name?: string;
 		qty: number;
 		price?: number;
-		tr_id: string;
-		status: string;
+		type: 'buy' | 'sell';
 		success: boolean;
-		latency_ms?: number;
+		message?: string;
 	}
 
 	let trades = $state<Trade[]>([]);
 	let loading = $state(true);
 	let selectedDate = $state(new Date().toISOString().slice(0, 10));
 
-	async function load() {
+	async function pull() {
 		loading = true;
 		try {
 			const res = await fetch(`${API}?date=${selectedDate}`);
@@ -29,11 +28,10 @@
 		loading = false;
 	}
 
-	$effect(() => { selectedDate; load(); });
+	$effect(() => { selectedDate; pull(); });
 
-	const isBuy = (tr: string) => tr.includes('0802') || tr.toLowerCase().includes('buy');
-	const typeLabel = (tr: string) => isBuy(tr) ? '매수' : '매도';
-	const typeClass = (tr: string) => isBuy(tr) ? 'buy' : 'sell';
+	const kind = (type: Trade['type']) => type === 'buy' ? '매수' : '매도';
+	const tone = (type: Trade['type']) => type === 'buy' ? 'buy' : 'sell';
 </script>
 
 <div class="th-wrap">
@@ -45,7 +43,7 @@
 	{#if loading}
 		<p class="th-msg">불러오는 중...</p>
 	{:else if trades.length === 0}
-		<p class="th-msg">체결 내역이 없습니다</p>
+		<p class="th-msg">거래 내역이 없습니다</p>
 	{:else}
 		<table class="th-table">
 			<thead>
@@ -62,7 +60,7 @@
 					<tr>
 						<td class="mono">{t.time?.slice(11, 19) ?? '-'}</td>
 						<td>
-							<span class="th-type {typeClass(t.tr_id)}">{typeLabel(t.tr_id)}</span>
+							<span class="th-type {tone(t.type)}">{kind(t.type)}</span>
 						</td>
 						<td>
 							<span class="th-name">{t.name ?? t.code}</span>
@@ -71,7 +69,7 @@
 						<td class="r mono">{t.qty}</td>
 						<td class="r">
 							<span class="th-status" class:ok={t.success} class:fail={!t.success}>
-								{t.success ? '체결' : '실패'}
+								{t.success ? '접수' : '실패'}
 							</span>
 						</td>
 					</tr>

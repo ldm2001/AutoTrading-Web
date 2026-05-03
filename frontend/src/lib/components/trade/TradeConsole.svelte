@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
-	import { tradingStatus, consoleMessages, watchCodes, stopBot } from '$lib/stores/trading';
+	import { tradingStatus, consoleMessages, watchCodes, boff } from '$lib/stores/trading';
 	import './TradeConsole.css';
 
 	let consoleEl: HTMLDivElement;
@@ -18,10 +18,10 @@
 	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
 	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
 
-	async function emergencyStop() {
+	async function halt() {
 		if (!$tradingStatus.is_running || stopping) return;
 		stopping = true;
-		await stopBot();
+		await boff();
 		stopping = false;
 	}
 </script>
@@ -36,7 +36,7 @@
 			<button
 				class="console-stop"
 				type="button"
-				onclick={emergencyStop}
+				onclick={halt}
 				disabled={!$tradingStatus.is_running || stopping}
 			>
 				{stopping ? '정지중' : '전체 긴급정지'}

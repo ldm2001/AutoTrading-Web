@@ -25,11 +25,40 @@
 		mdd_pct: number;
 		win_rate_pct: number;
 		risk_reward: number;
+		buy_hold_return_pct?: number | null;
+		excess_return_pct?: number | null;
+		avg_trade_cost_bps?: number;
+		validation_warnings?: string[];
+		validation_log_count?: number | null;
+		validation?: {
+			parameter_stability: Array<{
+				buy_threshold: number;
+				take_profit_pct: number;
+				fallback_stop_pct: number;
+				total_trades: number;
+				cum_return_pct: number;
+				excess_return_pct: number | null;
+			}>;
+			walk_forward: Array<{
+				window: number;
+				start_time: string;
+				end_time: string;
+				total_trades: number;
+				cum_return_pct: number;
+				excess_return_pct: number | null;
+			}>;
+		} | null;
+		cost_assumptions?: {
+			fee_bps: number;
+			sell_tax_bps: number;
+			slippage_bps: number;
+			spread_bps: number;
+		};
 		trades: BacktestTrade[];
 	}
 
 	// 파라미터 기본값
-	let days = $state(30);
+	let days = $state(365);
 	let tpPct = $state(5.0);
 	let maxBars = $state(20);
 	let loading = $state(false);
@@ -37,7 +66,7 @@
 	let error = $state<string | null>(null);
 
 	// POST /api/backtest 호출
-	async function runBacktest() {
+	async function job() {
 		const code = $selectedStock;
 		if (!code) return;
 
@@ -71,22 +100,26 @@
 		}
 	}
 
-	function fmtNum(n: number, digits = 2): string {
+	function num(n: number, digits = 2): string {
 		return n.toFixed(digits);
 	}
 
-	function fmtPrice(n: number): string {
+	function won(n: number): string {
 		return Math.round(n).toLocaleString('ko-KR');
 	}
 
+	function pct(n: number | null | undefined): string {
+		return typeof n === 'number' ? `${n > 0 ? '+' : ''}${num(n)}%` : '-';
+	}
+
 	// 청산 사유 한글 변환
-	function reasonLabel(r: string): string {
+	function why(r: string): string {
 		if (r === 'stop') return '손절';
 		if (r === 'tp') return '익절';
 		return '보유만기';
 	}
 
-	function reasonClass(r: string): string {
+	function tone(r: string): string {
 		if (r === 'stop') return 'reason-stop';
 		if (r === 'tp') return 'reason-tp';
 		return 'reason-trail';
@@ -98,7 +131,7 @@
 	<div class="backtest-form">
 		<label class="form-group">
 			<span>기간 (일)</span>
-			<input type="number" bind:value={days} min="7" max="180" />
+			<input type="number" bind:value={days} min="7" max="730" />
 		</label>
 		<label class="form-group">
 			<span>익절 (%)</span>
@@ -108,7 +141,7 @@
 			<span>최대보유 (봉)</span>
 			<input type="number" bind:value={maxBars} min="5" max="100" />
 		</label>
-		<button class="btn-run" onclick={runBacktest} disabled={loading || !$selectedStock}>
+		<button class="btn-run" onclick={job} disabled={loading || !$selectedStock}>
 			{loading ? '실행 중' : '실행'}
 		</button>
 	</div>
@@ -126,32 +159,90 @@
 			<div class="metric-tile">
 				<span class="label">누적수익률</span>
 				<span class="value" class:up={result.cum_return_pct > 0} class:down={result.cum_return_pct < 0}>
-					{result.cum_return_pct > 0 ? '+' : ''}{fmtNum(result.cum_return_pct)}%
+					{result.cum_return_pct > 0 ? '+' : ''}{num(result.cum_return_pct)}%
 				</span>
 			</div>
 			<div class="metric-tile">
 				<span class="label">연환산</span>
 				<span class="value" class:up={result.annualized_pct > 0} class:down={result.annualized_pct < 0}>
-					{result.annualized_pct > 0 ? '+' : ''}{fmtNum(result.annualized_pct)}%
+					{result.annualized_pct > 0 ? '+' : ''}{num(result.annualized_pct)}%
 				</span>
 			</div>
 			<div class="metric-tile">
 				<span class="label">MDD</span>
-				<span class="value down">{fmtNum(result.mdd_pct)}%</span>
+				<span class="value down">{num(result.mdd_pct)}%</span>
 			</div>
 			<div class="metric-tile">
 				<span class="label">승률</span>
-				<span class="value">{fmtNum(result.win_rate_pct, 1)}%</span>
+				<span class="value">{num(result.win_rate_pct, 1)}%</span>
 			</div>
 			<div class="metric-tile">
 				<span class="label">손익비</span>
-				<span class="value">{fmtNum(result.risk_reward)}</span>
+				<span class="value">{num(result.risk_reward)}</span>
 			</div>
 			<div class="metric-tile">
 				<span class="label">거래횟수</span>
 				<span class="value">{result.total_trades}</span>
 			</div>
+			<div class="metric-tile">
+				<span class="label">B&H 대비</span>
+				<span class="value" class:up={(result.excess_return_pct ?? 0) > 0} class:down={(result.excess_return_pct ?? 0) < 0}>
+					{pct(result.excess_return_pct)}
+				</span>
+			</div>
+			<div class="metric-tile">
+				<span class="label">왕복비용</span>
+				<span class="value">{num(result.avg_trade_cost_bps ?? 0, 1)}bp</span>
+			</div>
 		</div>
+
+		{#if result.validation_warnings?.length}
+			<div class="backtest-error">
+				{#each result.validation_warnings as warning}
+					<div>{warning}</div>
+				{/each}
+			</div>
+		{/if}
+
+		{#if result.cost_assumptions}
+			<div class="backtest-note">
+				비용 가정: 수수료 {num(result.cost_assumptions.fee_bps, 1)}bp,
+				매도세 {num(result.cost_assumptions.sell_tax_bps, 1)}bp,
+				슬리피지 {num(result.cost_assumptions.slippage_bps, 1)}bp,
+				스프레드 {num(result.cost_assumptions.spread_bps, 1)}bp
+				{#if result.validation_log_count}
+					· WF 기록 {result.validation_log_count}회
+				{/if}
+			</div>
+		{/if}
+
+		{#if result.validation}
+			<div class="trades-section">
+				<div class="trades-header">검증 요약</div>
+				<table class="trades-table">
+					<thead>
+						<tr>
+							<th>구분</th>
+							<th>표본</th>
+							<th>거래</th>
+							<th>수익률</th>
+							<th>B&H 대비</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each result.validation.walk_forward as row}
+							<tr>
+								<td>WF {row.window}</td>
+								<td>{row.start_time.slice(5)} ~ {row.end_time.slice(5)}</td>
+								<td>{row.total_trades}</td>
+								<td class:up={row.cum_return_pct > 0} class:down={row.cum_return_pct < 0}>{pct(row.cum_return_pct)}</td>
+								<td class:up={(row.excess_return_pct ?? 0) > 0} class:down={(row.excess_return_pct ?? 0) < 0}>{pct(row.excess_return_pct)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 
 		<!-- Trade List -->
 		{#if result.trades.length > 0}
@@ -172,12 +263,12 @@
 						{#each result.trades as trade}
 							<tr>
 								<td>{trade.entry_time}</td>
-								<td>{fmtPrice(trade.entry_price)}</td>
+								<td>{won(trade.entry_price)}</td>
 								<td>{trade.exit_time}</td>
-								<td>{fmtPrice(trade.exit_price)}</td>
-								<td><span class={reasonClass(trade.exit_reason)}>{reasonLabel(trade.exit_reason)}</span></td>
+								<td>{won(trade.exit_price)}</td>
+								<td><span class={tone(trade.exit_reason)}>{why(trade.exit_reason)}</span></td>
 								<td class:up={trade.pnl_pct > 0} class:down={trade.pnl_pct < 0}>
-									{trade.pnl_pct > 0 ? '+' : ''}{fmtNum(trade.pnl_pct)}%
+									{trade.pnl_pct > 0 ? '+' : ''}{num(trade.pnl_pct)}%
 								</td>
 							</tr>
 						{/each}

@@ -11,19 +11,19 @@
 
 	let { open, title, onclose, children }: Props = $props();
 
-	function handleBackdrop(e: MouseEvent) {
+	function bg(e: MouseEvent) {
 		if (e.target === e.currentTarget) onclose();
 	}
 
-	function handleKey(e: KeyboardEvent) {
+	function key(e: KeyboardEvent) {
 		if (e.key === 'Escape') onclose();
 	}
 </script>
 
-<svelte:window onkeydown={handleKey} />
+<svelte:window onkeydown={key} />
 
 {#if open}
-	<div class="modal-backdrop" onclick={handleBackdrop} onkeydown={handleKey} role="dialog" aria-modal="true" tabindex="-1">
+	<div class="modal-backdrop" onclick={bg} onkeydown={key} role="dialog" aria-modal="true" tabindex="-1">
 		<div class="modal-container">
 			<div class="modal-header">
 				<span class="modal-title">{title}</span>

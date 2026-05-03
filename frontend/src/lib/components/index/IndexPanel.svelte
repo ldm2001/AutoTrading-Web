@@ -2,7 +2,7 @@
 	import { indices } from '$lib/stores/stocks';
 	import './IndexPanel.css';
 
-	function fmtPct(n: number): string {
+	function pct(n: number): string {
 		return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 	}
 </script>
@@ -19,7 +19,7 @@
 				class:flat={idx.change_percent === 0}
 			>
 				{idx.change > 0 ? '+' : ''}{idx.change.toFixed(2)}
-				({fmtPct(idx.change_percent)})
+				({pct(idx.change_percent)})
 			</div>
 		</div>
 	{/each}

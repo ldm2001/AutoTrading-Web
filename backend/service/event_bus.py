@@ -27,13 +27,13 @@ class EventBus:
             self._handlers[event] = []
         self._handlers[event].append(handler)
 
-        def _off() -> None:
+        def off() -> None:
             try:
                 self._handlers[event].remove(handler)
             except ValueError:
                 pass
 
-        return _off
+        return off
 
     # 특정 이벤트의 모든 핸들러 해제
     def unbind(self, event: str) -> None:
@@ -61,9 +61,9 @@ class EventBus:
     # 구독 루프 시작
     async def start(self) -> None:
         if self._redis is not None:
-            self._task = asyncio.create_task(self._redis_loop())
+            self._task = asyncio.create_task(self.rloop())
         else:
-            self._task = asyncio.create_task(self._local_loop())
+            self._task = asyncio.create_task(self.lloop())
         logger.info("EventBus started (redis=%s)", self._redis is not None)
 
     # 구독 루프 중지
@@ -77,7 +77,7 @@ class EventBus:
             self._task = None
 
     # Redis Pub/Sub 비동기 구독 루프 (블로킹 폴링 제거)
-    async def _redis_loop(self) -> None:
+    async def rloop(self) -> None:
         try:
             pubsub = self._redis.pubsub()
             pubsub.subscribe(_CHANNEL)
@@ -91,7 +91,7 @@ class EventBus:
                 if msg and msg["type"] == "message":
                     try:
                         payload = json.loads(msg["data"])
-                        await self._dispatch(payload["event"], payload.get("data"))
+                        await self.fire(payload["event"], payload.get("data"))
                     except Exception as e:
                         logger.debug("EventBus dispatch error: %s", e)
         except asyncio.CancelledError:
@@ -106,21 +106,21 @@ class EventBus:
                 pass
 
     # 인프로세스 폴백 루프
-    async def _local_loop(self) -> None:
+    async def lloop(self) -> None:
         if self._local_queue is None:
             self._local_queue = asyncio.Queue(maxsize=1000)
         try:
             while True:
                 try:
                     payload = await asyncio.wait_for(self._local_queue.get(), timeout=1.0)
-                    await self._dispatch(payload["event"], payload.get("data"))
+                    await self.fire(payload["event"], payload.get("data"))
                 except TimeoutError:
                     continue
         except asyncio.CancelledError:
             pass
 
     # 핸들러 디스패치
-    async def _dispatch(self, event: str, data: Any) -> None:
+    async def fire(self, event: str, data: Any) -> None:
         handlers = list(self._handlers.get(event, []))
         for handler in handlers:
             try:

@@ -87,7 +87,7 @@ class Auth:
         return self._approval
 
     # 웹소켓 접속 주소를 반환
-    def ws_url(self) -> str:
+    def wsurl(self) -> str:
         if settings.url_ws:
             return settings.url_ws
         if "openapivts" in settings.url_base:

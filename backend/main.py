@@ -14,6 +14,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
+from api.security import ALLOWED_ORIGINS, MUTATING_METHODS, originok
 from service.trading.bot import bot
 from service.kis import kis
 from service.market.price_sync import price_sync
@@ -65,9 +66,9 @@ async def lifespan(app: FastAPI):
     if bot.running:
         await bot.stop()
     await bus.stop()
-    await price_sync.flush_day()
+    await price_sync.eod()
     if kis_ok:
-        await kis.ws_close()
+        await kis.wclose()
         await tick_q.stop()
         await kis.stop()
     logger.info("Shutdown complete")
@@ -82,10 +83,9 @@ app = FastAPI(
 )
 
 
-# CORS 허용 오리진 목록
-_ALLOWED_ORIGINS = {"http://localhost:5173", "http://localhost:3000", "http://localhost:4173"}
-# CSRF 검증 대상 HTTP 메서드
-_MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+# 하위 호환 테스트/설정을 위한 별칭
+_ALLOWED_ORIGINS = ALLOWED_ORIGINS
+_MUTATING_METHODS = MUTATING_METHODS
 
 
 # 보안 헤더 미들웨어 (CSRF 검증 + XSS/클릭재킹 방지)
@@ -94,7 +94,7 @@ class SecurityHeaders(BaseHTTPMiddleware):
         # CSRF: 상태 변경 요청 시 Origin 헤더 검증
         if request.method in _MUTATING_METHODS:
             origin = request.headers.get("origin")
-            if origin and origin not in _ALLOWED_ORIGINS:
+            if not originok(origin):
                 return Response("Forbidden: origin not allowed", status_code=403)
 
         response: Response = await call_next(request)
@@ -112,7 +112,7 @@ app.add_middleware(SecurityHeaders)
 # CORS 미들웨어 등록
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:4173"],
+    allow_origins=sorted(_ALLOWED_ORIGINS),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-API-Key"],
@@ -139,7 +139,7 @@ async def health():
         "status": "ok",
         "trading_bot": bot.running,
         "redis": kis.cache.redis is not None,
-        "kafka": tick_q.kafka_enabled,
+        "kafka": tick_q.kafkaon,
     }
 
 # 프로덕션: SvelteKit 빌드 정적 파일 서빙

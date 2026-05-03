@@ -49,14 +49,14 @@ class Scorer:
         return self._broker
 
     # 캐시 키 생성 (prediction 있으면 캐싱 안 함)
-    def _cache_key(self, code: str, *, fast: bool, prediction: dict | None) -> str | None:
+    def ckey(self, code: str, *, fast: bool, prediction: dict | None) -> str | None:
         if prediction is not None:
             return None
         mode = "fast" if fast else "full"
         return f"{mode}:{code}"
 
     # RSI 점수화 (-25 ~ +25)
-    def _rsi(self, val: float | None) -> tuple[float, str]:
+    def rsi(self, val: float | None) -> tuple[float, str]:
         if val is None:
             return 0, "RSI 데이터 부족"
         if val <= 25:
@@ -74,7 +74,7 @@ class Scorer:
         return -W_RSI, f"RSI {val:.1f} (극단 과매수 → 강력 매도)"
 
     # MACD 점수화 (-25 ~ +25)
-    def _macd(self, data: dict | None) -> tuple[float, str]:
+    def macd(self, data: dict | None) -> tuple[float, str]:
         if data is None:
             return 0, "MACD 데이터 부족"
         hist       = data["histogram"]
@@ -91,7 +91,7 @@ class Scorer:
         return 0, f"MACD 중립 (hist={hist:+.1f})"
 
     # 볼린저밴드 점수화 (-20 ~ +20)
-    def _bb(self, data: dict | None) -> tuple[float, str]:
+    def bb(self, data: dict | None) -> tuple[float, str]:
         if data is None:
             return 0, "볼린저밴드 데이터 부족"
         price      = data["current_price"]
@@ -115,7 +115,7 @@ class Scorer:
         return 0, "볼린저 중립 (밴드 내)"
 
     # 변동성 돌파 점수화 (-15 ~ +15)
-    def _vol(self, candles: list[dict], price: int) -> tuple[float, str]:
+    def vol(self, candles: list[dict], price: int) -> tuple[float, str]:
         if len(candles) < 2:
             return 0, "캔들 데이터 부족"
         prev       = candles[-2]
@@ -132,39 +132,39 @@ class Scorer:
         return 0, f"변동성 미돌파 (목표 {target:,.0f})"
 
     # 일봉 FVG 근접도 점수화 (-8 ~ +8)
-    def _fvg(self, candles: list[dict], price: int) -> tuple[float, str]:
+    def fvg(self, candles: list[dict], price: int) -> tuple[float, str]:
         try:
-            s, r = smc.fvg_score(candles, float(price))
+            s, r = smc.fvg(candles, float(price))
             return round(s * (W_FVG / 8), 1), r
         except Exception:
             return 0.0, "FVG 계산 오류"
 
     # OB 지지/저항 점수화 (-7 ~ +7)
-    def _ob(self, candles: list[dict], price: int) -> tuple[float, str]:
+    def ob(self, candles: list[dict], price: int) -> tuple[float, str]:
         try:
-            s, r = smc.ob_score(candles, float(price))
+            s, r = smc.ob(candles, float(price))
             return round(s * (W_OB / 7), 1), r
         except Exception:
             return 0.0, "OB 계산 오류"
 
     # 15분봉 FVG 점수화 (-15 ~ +15) — 실제 진입 트리거
-    def _fvg_15m(self, candles_15m: list[dict], price: int) -> tuple[float, str]:
+    def fvg15(self, candles_15m: list[dict], price: int) -> tuple[float, str]:
         try:
-            s, r, _ = smc.fvg_intraday(candles_15m, float(price))
+            s, r, _ = smc.fvgin(candles_15m, float(price))
             return round(s * (W_FVG_15M / 10), 1), r
         except Exception:
             return 0.0, "15m FVG 계산 오류"
 
     # BOS/CHoCH 구조 점수화 (-8 ~ +8)
-    def _struct(self, candles: list[dict]) -> tuple[float, str]:
+    def struct(self, candles: list[dict]) -> tuple[float, str]:
         try:
-            s, r = smc.structure_score(candles)
+            s, r = smc.struct(candles)
             return round(s * (W_STRUCT / 5), 1), r
         except Exception:
             return 0.0, "구조 분석 오류"
 
     # Transformer 예측 → 방향성 필터 (-10 ~ +10)
-    def _pred(self, prediction: dict | None, price: int) -> tuple[float, str]:
+    def pred(self, prediction: dict | None, price: int) -> tuple[float, str]:
         if prediction is None:
             return 0, "예측 데이터 없음"
         preds = prediction.get("predictions", [])
@@ -192,7 +192,7 @@ class Scorer:
     # 종목 종합 평가 (멀티팩터 + 15분봉 FVG 앙상블)
     # fast=True: 1단계 스크리닝용 (15분봉 스킵 → API 호출 2건으로 축소)
     async def evaluate(self, code: str, prediction: dict | None = None, fast: bool = False) -> dict:
-        cache_key = self._cache_key(code, fast=fast, prediction=prediction)
+        cache_key = self.ckey(code, fast=fast, prediction=prediction)
         if cache_key is not None:
             cached = _cache.get(cache_key)
             if cached is not None:
@@ -206,25 +206,25 @@ class Scorer:
                 candles_15m = None
             else:
                 candles, price_info, candles_15m = await asyncio.gather(
-                    b.daily(code), b.price(code), b.candles_15m(code),
+                    b.daily(code), b.price(code), b.c15(code),
                 )
             current_price = price_info["price"]
             ind = indicators.summary(candles)
 
-            rsi_s,    rsi_r    = self._rsi(ind["rsi"])
-            macd_s,   macd_r   = self._macd(ind["macd"])
-            bb_s,     bb_r     = self._bb(ind["bollinger"])
-            vol_s,    vol_r    = self._vol(candles, current_price)
-            pred_s,   pred_r   = self._pred(prediction, current_price)
-            fvg_s,    fvg_r    = self._fvg(candles, current_price)
-            ob_s,     ob_r     = self._ob(candles, current_price)
+            rsi_s,    rsi_r    = self.rsi(ind["rsi"])
+            macd_s,   macd_r   = self.macd(ind["macd"])
+            bb_s,     bb_r     = self.bb(ind["bollinger"])
+            vol_s,    vol_r    = self.vol(candles, current_price)
+            pred_s,   pred_r   = self.pred(prediction, current_price)
+            fvg_s,    fvg_r    = self.fvg(candles, current_price)
+            ob_s,     ob_r     = self.ob(candles, current_price)
 
             if fast:
                 fvg15_s, fvg15_r = 0.0, "1단계 스크리닝에서 제외"
                 str_s, str_r = 0.0, "1단계 스크리닝에서 제외"
             elif candles_15m:
-                fvg15_s, fvg15_r = self._fvg_15m(candles_15m, current_price)
-                str_s, str_r = self._struct(candles_15m)
+                fvg15_s, fvg15_r = self.fvg15(candles_15m, current_price)
+                str_s, str_r = self.struct(candles_15m)
             else:
                 fvg15_s, fvg15_r = 0.0, "15분봉 데이터 부족"
                 str_s, str_r = 0.0, "15분봉 데이터 부족"
@@ -246,7 +246,7 @@ class Scorer:
 
             # 동적 손절가는 full 평가 + 실제 15분봉 데이터가 있을 때만 계산
             stop_price = (
-                smc.structural_stop(candles_15m, float(current_price))
+                smc.stop(candles_15m, float(current_price))
                 if candles_15m
                 else None
             )
@@ -286,13 +286,13 @@ class Scorer:
             }
 
     # 동적 손절 — FVG 구조적 손절가 우선, 폴백으로 고정 %
-    async def stop_loss(
+    async def sl(
         self, code: str, avg_price: int,
         structural_price: float | None = None,
         fallback_pct: float = -3.0,
     ) -> tuple[bool, float]:
         try:
-            current = await self.broker.price_raw(code)
+            current = await self.broker.raw(code)
             pnl = (current - avg_price) / avg_price * 100
 
             # 구조적 손절가가 있으면 그 가격 하회 시 손절
@@ -310,4 +310,4 @@ scorer = Scorer()
 
 # 하위 호환
 evaluate  = scorer.evaluate
-stop_loss = scorer.stop_loss
+sl = scorer.sl

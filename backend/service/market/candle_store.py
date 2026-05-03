@@ -59,12 +59,12 @@ class CandleStore:
         ts = ts or datetime.datetime.now()
         async with self._lock:
             for interval in (15, 60):
-                bk = self._bucket_key(ts, interval)
+                bk = self.bucket(ts, interval)
                 bucket = self._buf[code][interval]
                 if bk in bucket:
                     bucket[bk].update(price, volume)
                 else:
-                    bucket[bk] = Candle(price, volume, self._bucket_ts(ts, interval))
+                    bucket[bk] = Candle(price, volume, self.slot(ts, interval))
 
     # 특정 종목의 N분봉 캔들 리스트 반환
     def candles(self, code: str, interval: int = 15) -> list[dict]:
@@ -81,9 +81,9 @@ class CandleStore:
                     if not bucket:
                         continue
                     rows = [c.snapshot() for c in sorted(bucket.values(), key=lambda c: c.ts)]
-                    path = self._path(code, interval, date_str)
+                    path = self.path(code, interval, date_str)
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    self._csv_out(path, rows)
+                    self.csvout(path, rows)
                     saved += 1
                     logger.info(f"Saved {len(rows)} candles → {path}")
             self._buf.clear()
@@ -93,36 +93,40 @@ class CandleStore:
     def load(self, code: str, interval: int = 15,
              date_str: str | None = None) -> list[dict]:
         date_str = date_str or datetime.date.today().isoformat()
-        path = self._path(code, interval, date_str)
+        path = self.path(code, interval, date_str)
         if not path.exists():
             return []
-        return self._csv_in(path)
+        return self.csvin(path)
 
-    # 최근 N일 분봉 병합 로드
-    def load_days(self, code: str, interval: int = 15, days: int = 5) -> list[dict]:
-        result: list[dict] = []
-        today = datetime.date.today()
-        for d in range(days - 1, -1, -1):
-            dt = today - datetime.timedelta(days=d)
-            result.extend(self.load(code, interval, dt.isoformat()))
-        return result
+    # 저장된 세션 파일을 날짜 간격과 무관하게 최근 N개까지 병합 로드
+    def span(self, code: str, interval: int = 15, days: int = 365) -> list[dict]:
+        root = self._dir / code
+        if not root.exists():
+            return []
+        files = sorted(root.glob(f"*_{interval}m.csv"))
+        if days > 0:
+            files = files[-days:]
+        rows: list[dict] = []
+        for path in files:
+            rows.extend(self.csvin(path))
+        return sorted(rows, key=lambda row: row["time"])
 
     # 시각을 interval 단위 버킷 키로 변환
-    def _bucket_key(self, ts: datetime.datetime, interval: int) -> str:
+    def bucket(self, ts: datetime.datetime, interval: int) -> str:
         m = (ts.minute // interval) * interval
         return ts.replace(minute=m, second=0, microsecond=0).strftime("%H%M")
 
     # 시각을 interval 단위 시작 시각으로 정렬
-    def _bucket_ts(self, ts: datetime.datetime, interval: int) -> datetime.datetime:
+    def slot(self, ts: datetime.datetime, interval: int) -> datetime.datetime:
         m = (ts.minute // interval) * interval
         return ts.replace(minute=m, second=0, microsecond=0)
 
     # 종목/간격/날짜 기반 CSV 파일 경로 생성
-    def _path(self, code: str, interval: int, date_str: str) -> Path:
+    def path(self, code: str, interval: int, date_str: str) -> Path:
         return self._dir / code / f"{date_str}_{interval}m.csv"
 
     # 캔들 리스트를 CSV 파일로 저장
-    def _csv_out(self, path: Path, rows: list[dict]) -> None:
+    def csvout(self, path: Path, rows: list[dict]) -> None:
         header = "time,open,high,low,close,volume\n"
         lines = [header]
         for r in rows:
@@ -132,7 +136,7 @@ class CandleStore:
         path.write_text("".join(lines))
 
     # CSV 파일에서 캔들 리스트 로드
-    def _csv_in(self, path: Path) -> list[dict]:
+    def csvin(self, path: Path) -> list[dict]:
         rows: list[dict] = []
         for line in path.read_text().strip().split("\n")[1:]:
             parts = line.split(",")

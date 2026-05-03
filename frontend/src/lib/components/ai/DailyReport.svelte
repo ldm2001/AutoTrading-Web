@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { dailyReport, fetchDailyReport } from '$lib/stores/ai';
+	import { dailyReport, rptq } from '$lib/stores/ai';
 	import './DailyReport.css';
 
 	let loading = $state(false);
@@ -7,7 +7,7 @@
 	$effect(() => {
 		if ($dailyReport === null) {
 			loading = true;
-			fetchDailyReport().finally(() => loading = false);
+			rptq().finally(() => loading = false);
 		}
 	});
 </script>

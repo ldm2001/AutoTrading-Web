@@ -24,7 +24,7 @@ class Trade:
         self._audit = audit
 
     # 감사 로그 기록
-    def _log(self, entry: dict) -> None:
+    def log(self, entry: dict) -> None:
         if self._audit:
             self._audit(entry)
 
@@ -131,7 +131,7 @@ class Trade:
             resp.raise_for_status()
             result = resp.json()
             ok = result.get("rt_cd") == "0"
-            self._log({
+            self.log({
                 "time": stamp,
                 "code": code,
                 "qty": qty,
@@ -150,7 +150,7 @@ class Trade:
             status = None
             if isinstance(err, httpx.HTTPStatusError):
                 status = err.response.status_code
-            self._log({
+            self.log({
                 "time": stamp,
                 "code": code,
                 "qty": qty,

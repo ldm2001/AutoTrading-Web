@@ -42,8 +42,8 @@ class KIS:
         return await self.market.price(code)
 
     # 현재가 숫자만 반환
-    async def price_raw(self, code: str) -> int:
-        return await self.market.price_raw(code)
+    async def raw(self, code: str) -> int:
+        return await self.market.raw(code)
 
     # 5호가를 조회
     async def orderbook(self, code: str) -> dict:
@@ -54,8 +54,8 @@ class KIS:
         return await self.market.daily(code, count)
 
     # 15분봉 캔들을 조회
-    async def candles_15m(self, code: str) -> list[dict]:
-        return await self.market.candles_15m(code)
+    async def c15(self, code: str) -> list[dict]:
+        return await self.market.c15(code)
 
     # 종목 목록 현재가를 모아 조회
     async def prices(self, codes: list[str] | None = None) -> list[dict]:
@@ -90,23 +90,23 @@ class KIS:
         return await self.trade.sell(code, qty)
 
     # 실시간 체결 구독을 맞춤
-    async def ws_sync(self, codes: list[str]) -> None:
+    async def wsync(self, codes: list[str]) -> None:
         await self.ws.sync(codes)
 
     # 실시간 체결 연결을 닫음
-    async def ws_close(self) -> None:
+    async def wclose(self) -> None:
         await self.ws.close()
 
     # 실시간 최신 시세를 seed 한다
-    def ws_seed(self, items: list[dict]) -> None:
+    def wseed(self, items: list[dict]) -> None:
         self.ws.seed(items)
 
     # 실시간 최신 시세 목록을 반환
-    def ws_rows(self, codes: list[str] | None = None) -> list[dict]:
+    def wrows(self, codes: list[str] | None = None) -> list[dict]:
         return self.ws.rows(codes)
 
     # 실시간 수신 상태를 반환
-    def ws_live(self) -> bool:
+    def wlive(self) -> bool:
         return self.ws.live()
 
 kis = KIS()

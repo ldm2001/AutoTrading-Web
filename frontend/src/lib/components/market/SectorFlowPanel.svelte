@@ -13,7 +13,7 @@
 	let sectors = $state<Sector[]>([]);
 	let loading = $state(true);
 
-	async function load() {
+	async function pull() {
 		loading = true;
 		try {
 			const res = await fetch(API);
@@ -24,9 +24,9 @@
 		loading = false;
 	}
 
-	$effect(() => { load(); });
+	$effect(() => { pull(); });
 
-	const plClass = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
+	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
 	const maxChange = $derived(Math.max(...sectors.map(s => Math.abs(s.avg_change_pct)), 1));
 </script>
 
@@ -38,31 +38,31 @@
 	{:else}
 		<div class="sf-list">
 			{#each sectors as s}
-				{@const barWidth = Math.min(Math.abs(s.avg_change_pct) / maxChange * 100, 100)}
+				{@const width = Math.min(Math.abs(s.avg_change_pct) / maxChange * 100, 100)}
 				<div class="sf-row">
 					<div class="sf-header">
 						<span class="sf-name">{s.sector}</span>
 						<span class="sf-count">{s.stock_count}종목</span>
-						<span class="sf-change {plClass(s.avg_change_pct)}">
+						<span class="sf-change {tone(s.avg_change_pct)}">
 							{s.avg_change_pct > 0 ? '+' : ''}{s.avg_change_pct.toFixed(2)}%
 						</span>
 					</div>
 					<div class="sf-bar-track">
 						<div
-							class="sf-bar-fill {plClass(s.avg_change_pct)}"
-							style="width: {barWidth}%"
+							class="sf-bar-fill {tone(s.avg_change_pct)}"
+							style="width: {width}%"
 						></div>
 					</div>
 					<div class="sf-stocks">
 						{#each s.top_stocks as st}
-							<span class="sf-stock {plClass(st.change_pct)}">
+							<span class="sf-stock {tone(st.change_pct)}">
 								{st.name} {st.change_pct > 0 ? '+' : ''}{st.change_pct.toFixed(1)}%
 							</span>
 						{/each}
 						{#if s.bottom_stocks.length > 0 && s.bottom_stocks[0].change_pct < 0}
 							<span class="sf-sep">|</span>
 							{#each s.bottom_stocks as st}
-								<span class="sf-stock {plClass(st.change_pct)}">
+								<span class="sf-stock {tone(st.change_pct)}">
 									{st.name} {st.change_pct.toFixed(1)}%
 								</span>
 							{/each}

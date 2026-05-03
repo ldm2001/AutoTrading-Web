@@ -5,11 +5,11 @@ import numpy as np
 class Indicators:
 
     # 종가 배열 → numpy float64
-    def _arr(self, candles: list[dict]) -> np.ndarray:
+    def arr(self, candles: list[dict]) -> np.ndarray:
         return np.array([c["close"] for c in candles], dtype=np.float64)
 
     # EMA — 초기값 첫 원소, 이후 지수평활
-    def _ema(self, arr: np.ndarray, period: int) -> np.ndarray:
+    def ema(self, arr: np.ndarray, period: int) -> np.ndarray:
         k = 2.0 / (period + 1)
         out = np.empty(len(arr))
         out[0] = arr[0]
@@ -19,7 +19,7 @@ class Indicators:
 
     # RSI 계산 (기본 14일) — Wilder smoothing
     def rsi(self, candles: list[dict], period: int = 14) -> float | None:
-        closes = self._arr(candles)
+        closes = self.arr(candles)
         if len(closes) < period + 1:
             return None
         delta  = np.diff(closes)
@@ -42,13 +42,13 @@ class Indicators:
         slow: int = 26,
         signal_period: int = 9,
     ) -> dict | None:
-        closes = self._arr(candles)
+        closes = self.arr(candles)
         if len(closes) < slow + signal_period:
             return None
-        ema_f = self._ema(closes, fast)
-        ema_s = self._ema(closes, slow)
+        ema_f = self.ema(closes, fast)
+        ema_s = self.ema(closes, slow)
         line  = ema_f - ema_s
-        sig   = self._ema(line[slow - 1:], signal_period)
+        sig   = self.ema(line[slow - 1:], signal_period)
         m, s  = float(line[-1]), float(sig[-1])
         return {
             "macd":      round(m, 2),
@@ -63,7 +63,7 @@ class Indicators:
         period: int = 20,
         std_dev: float = 2.0,
     ) -> dict | None:
-        closes = self._arr(candles)
+        closes = self.arr(candles)
         if len(closes) < period:
             return None
         window = closes[-period:]
@@ -95,7 +95,7 @@ class Indicators:
 
     # 변동성 종합 분석
     def volatility(self, candles: list[dict]) -> dict:
-        closes = self._arr(candles)
+        closes = self.arr(candles)
         result: dict = {"atr": self.atr(candles), "atr_pct": None, "bb_width": None, "daily_range_pct": None, "volatility_grade": "N/A"}
         if len(closes) < 2:
             return result

@@ -59,7 +59,7 @@ class Market:
         return result
 
     # 현재가 숫자만 반환
-    async def price_raw(self, code: str) -> int:
+    async def raw(self, code: str) -> int:
         return (await self.price(code))["price"]
 
     # 5호가를 조회
@@ -141,7 +141,7 @@ class Market:
         return candles
 
     # 1분봉 3구간 수집 → 15분 단위 OHLCV 캔들로 집계
-    async def candles_15m(self, code: str) -> list[dict]:
+    async def c15(self, code: str) -> list[dict]:
         key = f"candles_15m:{code}"
         cached = self.cache.get(key)
         if cached is not None:

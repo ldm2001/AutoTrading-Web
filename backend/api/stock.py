@@ -234,7 +234,7 @@ async def recommend():
 
 # 업종별 등락 흐름
 @router.get("/sector/flow")
-async def sector_flow():
+async def sectorflow():
     from service.market.sector import label
     try:
         codes = list(NAMES.keys())[:80]

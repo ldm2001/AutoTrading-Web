@@ -19,10 +19,10 @@
 	import SectorFlowPanel from '$lib/components/market/SectorFlowPanel.svelte';
 	import Modal from '$lib/components/modal/Modal.svelte';
 	import { fly } from 'svelte/transition';
-	import { indices, initAllStocks, fetchIndices, selectedStock, selectedStockDetail, fetchStockPrice, updateStockPrices } from '$lib/stores/stocks';
-	import { tradingStatus, fetchTradingStatus, fetchWatchlist, flipWatchlist, watchCodes, watchBusy, addConsoleMessage } from '$lib/stores/trading';
+	import { indices, stockinit, idxq, selectedStock, selectedStockDetail, quote, mergeq } from '$lib/stores/stocks';
+	import { tradingStatus, statq, listq, watchx, watchCodes, watchBusy, logmsg } from '$lib/stores/trading';
 	import { priceWs, tradeWs } from '$lib/stores/websocket';
-	import { fetchRecommendations } from '$lib/stores/recommend';
+	import { recq } from '$lib/stores/recommend';
 	import type { PriceUpdate, TradeMessage } from '$lib/types';
 	import './page.css';
 
@@ -57,7 +57,7 @@
 		sectorflow: () => showSectorFlow = true,
 	};
 
-	function openMenu(key: string) {
+	function menu(key: string) {
 		menuOpen = false;
 		menuMap[key]?.();
 	}
@@ -76,13 +76,13 @@
 		return `${(value * 100).toFixed(0)}%`;
 	}
 
-	async function applyAuto() {
+	async function arm() {
 		const code = $selectedStock;
 		const name = stockInfo?.name ?? code;
 		if (!code) return;
-		const result = await flipWatchlist(code);
+		const result = await watchx(code);
 		if (!result.ok) return;
-		addConsoleMessage(
+		logmsg(
 			result.active
 				? `[AUTO] ${name} 자동매매 대상에 등록했습니다.`
 				: `[AUTO] ${name} 자동매매 대상에서 제외했습니다.`
@@ -94,19 +94,19 @@
 	$effect(() => {
 		const code = $selectedStock;
 		if (code) {
-			fetchStockPrice(code);
+			quote(code);
 		}
 	});
 
 	onMount(() => {
-		Promise.all([initAllStocks(), fetchIndices(), fetchTradingStatus(), fetchWatchlist(), fetchRecommendations()]);
+		Promise.all([stockinit(), idxq(), statq(), listq(), recq()]);
 
 		priceWs.connect();
 		tradeWs.connect();
 
 		const offPrice = priceWs.on('price_update', (msg: unknown) => {
 			const data = msg as PriceUpdate;
-			if (data.stocks) updateStockPrices(data.stocks);
+			if (data.stocks) mergeq(data.stocks);
 			// 부분 실패 시 기존 값 유지 — merge로 깜빡임 방지
 			if (data.indices?.length) {
 				indices.update(cur => {
@@ -120,12 +120,12 @@
 		const offMsg = tradeWs.on('message', (msg: unknown) => {
 			const data = msg as TradeMessage;
 			if (typeof data.data === 'string') {
-				addConsoleMessage(data.data);
+				logmsg(data.data);
 			}
 		});
 
 		const offTrade = tradeWs.on('trade', (_msg: unknown) => {
-			fetchTradingStatus();
+			statq();
 		});
 
 			return () => {
@@ -145,44 +145,44 @@
 		<div class="menu-backdrop" onclick={() => menuOpen = false}></div>
 		<nav class="menu-dropdown">
 			<span class="menu-label">마켓</span>
-			<button class="menu-item" onclick={() => openMenu('report')}>
+			<button class="menu-item" onclick={() => menu('report')}>
 				<span class="menu-dot report"></span>리포트
 			</button>
-			<button class="menu-item" onclick={() => openMenu('heatmap')}>
+			<button class="menu-item" onclick={() => menu('heatmap')}>
 				<span class="menu-dot heatmap"></span>섹터맵
 			</button>
 
 			{#if stockInfo}
 				<span class="menu-label">분석</span>
-				<button class="menu-item" onclick={() => openMenu('ai')}>
+				<button class="menu-item" onclick={() => menu('ai')}>
 					<span class="menu-dot ai"></span>AI 분석
 				</button>
-				<button class="menu-item" onclick={() => openMenu('predict')}>
+				<button class="menu-item" onclick={() => menu('predict')}>
 					<span class="menu-dot predict"></span>AI 예측
 				</button>
-				<button class="menu-item" onclick={() => openMenu('news')}>
+				<button class="menu-item" onclick={() => menu('news')}>
 					<span class="menu-dot news"></span>뉴스
 				</button>
 
 				<span class="menu-label">매매</span>
-				<button class="menu-item" onclick={() => openMenu('backtest')}>
+				<button class="menu-item" onclick={() => menu('backtest')}>
 					<span class="menu-dot backtest"></span>백테스트
 				</button>
 			{/if}
 
 			<span class="menu-label">포트폴리오</span>
-			<button class="menu-item" onclick={() => openMenu('holdings')}>
+			<button class="menu-item" onclick={() => menu('holdings')}>
 				<span class="menu-dot holdings"></span>보유종목
 			</button>
-			<button class="menu-item" onclick={() => openMenu('history')}>
+			<button class="menu-item" onclick={() => menu('history')}>
 				<span class="menu-dot history"></span>체결내역
 			</button>
-			<button class="menu-item" onclick={() => openMenu('profit')}>
+			<button class="menu-item" onclick={() => menu('profit')}>
 				<span class="menu-dot profit"></span>수익현황
 			</button>
 
 			<span class="menu-label">시장분석</span>
-			<button class="menu-item" onclick={() => openMenu('sectorflow')}>
+			<button class="menu-item" onclick={() => menu('sectorflow')}>
 				<span class="menu-dot sectorflow"></span>업종흐름
 			</button>
 		</nav>
@@ -215,7 +215,12 @@
 				</div>
 
 				<div class="info-actions">
-					<button class="action-btn order" type="button" onclick={() => showOrder = true}>
+					<button
+						class="action-btn order"
+						type="button"
+						onclick={() => showOrder = true}
+						aria-label="주식주문 패널 열기 — {stockInfo?.name ?? $selectedStock}"
+					>
 						주식주문
 					</button>
 					<button
@@ -224,8 +229,9 @@
 						class:live={autoLive}
 						type="button"
 						onclick={() => showAuto = true}
+						aria-label="자동매매 설정 열기 — {stockInfo?.name ?? $selectedStock}, 현재 상태 {autoLive ? 'LIVE' : autoOn ? 'READY' : 'MANUAL'}"
 					>
-						<span class="action-dot"></span>{autoLabel}
+						<span class="action-dot" aria-hidden="true"></span>{autoLabel}
 					</button>
 				</div>
 			</div>
@@ -345,7 +351,7 @@
 			<button class="auto-btn ghost" type="button" onclick={() => showAuto = false}>
 				닫기
 			</button>
-			<button class="auto-btn strong" type="button" onclick={applyAuto} disabled={$watchBusy}>
+			<button class="auto-btn strong" type="button" onclick={arm} disabled={$watchBusy}>
 				{$watchBusy ? '처리중' : autoOn ? '자동매매 제외' : '자동매매 등록'}
 			</button>
 		</div>

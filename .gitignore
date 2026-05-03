@@ -22,6 +22,14 @@ dist/
 # oh-my-claudecode plugin state
 .omc/
 
+# Local agent/runtime state
+.claude/
+.mcp.json
+.omx/
+CLAUDE.md
+.venv-autogen/
+.autogenstudio/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -40,6 +48,7 @@ reports/kese/physical/
 
 # Candle data
 backend/service/data/
+backend/service/watchlist.json
 
 # Legacy
 config.yaml
@@ -55,9 +64,11 @@ docs/
 /playwright/.cache/
 /playwright/.auth/
 playwright.config.ts
-tests/
+/tests/
 
 # 루트 레벨 Playwright + 로드 테스트
 /package.json
 /package-lock.json
 load-test.js
+# Added by code-review-graph
+.code-review-graph/

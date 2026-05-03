@@ -34,7 +34,7 @@ export function swr<T>(
 
 	const { store } = entry;
 
-	async function revalidate(force = false) {
+	async function sync(force = false) {
 		const now = Date.now();
 		const e = cache.get(key)!;
 
@@ -58,24 +58,24 @@ export function swr<T>(
 	}
 
 	// stale check — ttl 초과 시 자동 revalidate
-	function get(): Writable<SWRState<T>> {
+	function val(): Writable<SWRState<T>> {
 		const e = cache.get(key)!;
 		const now = Date.now();
 		if (now - e.lastFetch > ttl) {
-			revalidate();
+			sync();
 		}
 		return store as Writable<SWRState<T>>;
 	}
 
 	// 캐시 무효화
-	function invalidate() {
+	function inv() {
 		cache.delete(key);
 	}
 
 	// 옵티미스틱 업데이트
-	function mutate(updater: (current: T | null) => T) {
+	function mut(updater: (current: T | null) => T) {
 		store.update(s => ({ ...s, data: updater(s.data as T | null) as unknown }));
 	}
 
-	return { subscribe: (store as Writable<SWRState<T>>).subscribe, revalidate, get, invalidate, mutate };
+	return { subscribe: (store as Writable<SWRState<T>>).subscribe, revalidate: sync, get: val, invalidate: inv, mutate: mut };
 }

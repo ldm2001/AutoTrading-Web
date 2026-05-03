@@ -6,7 +6,7 @@
 		HistogramSeries,
 		type IChartApi
 	} from 'lightweight-charts';
-	import { selectedStock, dailyCandles, fetchDailyCandles, stockMap } from '$lib/stores/stocks';
+	import { selectedStock, dailyCandles, dayq, stockMap } from '$lib/stores/stocks';
 	import { prediction } from '$lib/stores/predict';
 	import type { DailyCandle } from '$lib/types';
 	import './StockChart.css';
@@ -33,7 +33,7 @@
 			.catch(() => {});
 	});
 
-	const gradeColor = (g: string) => {
+	const hue = (g: string) => {
 		if (g === '매우높음') return '#dc2626';
 		if (g === '높음') return '#ea580c';
 		if (g === '보통') return '#d97706';
@@ -70,7 +70,7 @@
 	});
 
 	// 캔들 배열 - 상승 빨강 / 하락 파랑 per-point 라인 데이터
-	function toColoredLine(candles: DailyCandle[]) {
+	function line(candles: DailyCandle[]) {
 		return candles.map((c, i) => ({
 			time: c.date,
 			value: c.close,
@@ -84,7 +84,7 @@
 		}));
 	}
 
-	function buildChart() {
+	function plot() {
 		if (!chart || $dailyCandles.length === 0) return;
 
 		if (mainSeries) { try { chart.removeSeries(mainSeries); } catch {} }
@@ -111,7 +111,7 @@
 			priceLineStyle: 2,
 			priceLineWidth: 1,
 		});
-		mainSeries.setData(toColoredLine(candles) as any);
+		mainSeries.setData(line(candles) as any);
 
 		// 거래량 - 상승일 빨강, 하락일 파랑
 		volumeSeries = chart.addSeries(HistogramSeries, {
@@ -186,19 +186,19 @@
 			lineType: 2,
 		});
 
-		fetchDailyCandles($selectedStock);
+		dayq($selectedStock);
 
 		return () => chart.remove();
 	});
 
 	// 종목 변경 시 캔들 새로 로드
 	$effect(() => {
-		if (mainSeries) fetchDailyCandles($selectedStock);
+		if (mainSeries) dayq($selectedStock);
 	});
 
 	// 캔들 데이터 변경 시 차트 재빌드
 	$effect(() => {
-		if (mainSeries && $dailyCandles.length > 0) buildChart();
+		if (mainSeries && $dailyCandles.length > 0) plot();
 	});
 
 	// 실시간 가격 업데이트 - 오늘 캔들 색상·가격 반영
@@ -298,7 +298,7 @@
 			<div class="stock-details vol-row">
 				<div class="detail-item">
 					<span class="detail-label">변동성</span>
-					<span class="detail-value" style="color: {gradeColor(volData.volatility_grade)}; font-weight:700">
+					<span class="detail-value" style="color: {hue(volData.volatility_grade)}; font-weight:700">
 						{volData.volatility_grade}
 					</span>
 				</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { prediction, predictionLoading, fetchPrediction } from '$lib/stores/predict';
+	import { prediction, predictionLoading, predq } from '$lib/stores/predict';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
 	import './PredictPanel.css';
 
@@ -9,18 +9,18 @@
 		const code = $selectedStock;
 		if (code && code !== lastCode) {
 			lastCode = code;
-			fetchPrediction(code);
+			predq(code);
 		}
 	});
 
 	const stockInfo = $derived($stockMap.get($selectedStock));
 	const lastClose = $derived(stockInfo?.price ?? 0);
 
-	function fmtPrice(n: number): string {
+	function won(n: number): string {
 		return n.toLocaleString('ko-KR');
 	}
 
-	function changeFrom(close: number, base: number): { value: number; pct: number } {
+	function diff(close: number, base: number): { value: number; pct: number } {
 		const value = close - base;
 		const pct = base > 0 ? (value / base) * 100 : 0;
 		return { value, pct };
@@ -64,16 +64,16 @@
 			<tbody>
 				{#each $prediction.predictions as candle, i}
 					{@const base = i === 0 ? lastClose : $prediction.predictions[i - 1].close}
-					{@const diff = changeFrom(candle.close, base)}
+					{@const d = diff(candle.close, base)}
 					<tr>
 						<td>{candle.date}</td>
-						<td>{fmtPrice(candle.open)}</td>
-						<td class="td-up">{fmtPrice(candle.high)}</td>
-						<td class="td-down">{fmtPrice(candle.low)}</td>
-						<td>{fmtPrice(candle.close)}</td>
-						<td class:td-up={diff.value > 0} class:td-down={diff.value < 0}>
-							{diff.value > 0 ? '+' : ''}{fmtPrice(diff.value)}
-							({diff.pct > 0 ? '+' : ''}{diff.pct.toFixed(2)}%)
+						<td>{won(candle.open)}</td>
+						<td class="td-up">{won(candle.high)}</td>
+						<td class="td-down">{won(candle.low)}</td>
+						<td>{won(candle.close)}</td>
+						<td class:td-up={d.value > 0} class:td-down={d.value < 0}>
+							{d.value > 0 ? '+' : ''}{won(d.value)}
+							({d.pct > 0 ? '+' : ''}{d.pct.toFixed(2)}%)
 						</td>
 					</tr>
 				{/each}

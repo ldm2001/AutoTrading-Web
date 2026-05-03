@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { aiSignal, aiLoading, fetchAISignal, fetchNewsSentiment } from '$lib/stores/ai';
+	import { aiSignal, aiLoading, aisig, moodq } from '$lib/stores/ai';
 	import { selectedStock } from '$lib/stores/stocks';
 	import './AISignalPanel.css';
 
@@ -9,12 +9,12 @@
 		const code = $selectedStock;
 		if (code && code !== lastCode) {
 			lastCode = code;
-			fetchAISignal(code);
-			fetchNewsSentiment(code);
+			aisig(code);
+			moodq(code);
 		}
 	});
 
-	function signalLabel(signal: string): string {
+	function sig(signal: string): string {
 		switch (signal) {
 			case 'buy': return '매수';
 			case 'sell': return '매도';
@@ -22,7 +22,7 @@
 		}
 	}
 
-	function rsiLabel(rsi: number): string {
+	function rsitxt(rsi: number): string {
 		if (rsi >= 70) return '과매수';
 		if (rsi <= 30) return '과매도';
 		return '중립';
@@ -45,7 +45,7 @@
 	{:else if $aiSignal}
 		<div class="ai-signal-row">
 			<div class="ai-signal-badge" class:buy={$aiSignal.signal === 'buy'} class:sell={$aiSignal.signal === 'sell'} class:hold={$aiSignal.signal === 'hold'}>
-				{signalLabel($aiSignal.signal)}
+				{sig($aiSignal.signal)}
 			</div>
 			<div class="ai-confidence">
 				<span class="ai-confidence-label">확신도</span>
@@ -71,7 +71,7 @@
 				<div class="ai-indicator">
 					<span class="ai-ind-label">RSI(14)</span>
 					<span class="ai-ind-value" class:over-buy={$aiSignal.indicators.rsi >= 70} class:over-sell={$aiSignal.indicators.rsi <= 30}>
-						{$aiSignal.indicators.rsi} ({rsiLabel($aiSignal.indicators.rsi)})
+						{$aiSignal.indicators.rsi} ({rsitxt($aiSignal.indicators.rsi)})
 					</span>
 				</div>
 			{/if}

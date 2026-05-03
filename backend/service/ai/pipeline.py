@@ -29,7 +29,7 @@ _KR_HOLIDAYS_2026 = {
 }
 
 # 장 개장 여부 확인 (주말/공휴일 제외)
-def _market_open(d: date | None = None) -> bool:
+def mkt(d: date | None = None) -> bool:
     d = d or date.today()
     if d.weekday() >= 5:
         return False
@@ -39,7 +39,7 @@ def _market_open(d: date | None = None) -> bool:
 
 
 # 종목 코드 → 이름 조회
-def _name(code: str) -> str:
+def name(code: str) -> str:
     if ALL_STOCKS and code in ALL_STOCKS:
         return ALL_STOCKS[code]["name"]
     return NAMES.get(code, code)
@@ -59,7 +59,7 @@ class AIPipeline:
         if cached is not None:
             return cached
         try:
-            stock_name = _name(code)
+            stock_name = name(code)
             # daily + news + price 병렬 요청
             candles, stock_news, stock_info = await asyncio.gather(
                 kis.daily(code),
@@ -94,7 +94,7 @@ class AIPipeline:
         if cached is not None:
             return cached
         try:
-            stock_name = _name(code)
+            stock_name = name(code)
             stock_news = await news.headlines(code, count=10)
             if gemini.enabled:
                 gemini_result = await gemini.sentiment(stock_news, stock_name)
@@ -140,7 +140,7 @@ class AIPipeline:
             return await gemini.report(
                 trades, portfolio, market,
                 today_str=today.strftime("%Y-%m-%d (%A)"),
-                market_open=_market_open(today),
+                market_open=mkt(today),
             )
         except Exception as e:
             logger.error(f"Daily report generation failed: {e}")

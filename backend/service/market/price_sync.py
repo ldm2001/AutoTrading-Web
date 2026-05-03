@@ -18,7 +18,7 @@ class PriceSync:
         self._last_flushed_day: str | None = None
 
     # 날짜 변경 시 누적 거래량 초기화
-    def _ensure_day(self, date_str: str) -> None:
+    def day(self, date_str: str) -> None:
         if self._volume_day != date_str:
             self._volume_day = date_str
             self._last_volume.clear()
@@ -41,7 +41,7 @@ class PriceSync:
     ) -> None:
         ts = ts or datetime.datetime.now()
         date_str = ts.date().isoformat()
-        self._ensure_day(date_str)
+        self.day(date_str)
 
         for stock in stocks:
             code = str(stock.get("code", "")).zfill(6)
@@ -59,7 +59,7 @@ class PriceSync:
             await self.tick(code, price, volume_delta, ts)
 
     # 장 마감 후 캔들 데이터 파일로 저장
-    async def flush_day(self, date_str: str | None = None) -> int:
+    async def eod(self, date_str: str | None = None) -> int:
         date_str = date_str or datetime.date.today().isoformat()
         if self._last_flushed_day == date_str:
             return 0

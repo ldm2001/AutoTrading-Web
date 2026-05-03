@@ -122,7 +122,7 @@ INDICES: dict[str, tuple[str, str]] = {
 }
 
 # 최근 영업일 추적 (주말/장기 공휴일 자동 회피)
-def _recent_trading_day() -> str | None:
+def _day0() -> str | None:
     from pykrx import stock
     # 당일은 KRX 공시 전일 수 있어 전일부터 탐색
     d = datetime.now() - timedelta(days=1)
@@ -137,11 +137,8 @@ def _recent_trading_day() -> str | None:
     return None
 
 # KRX(pykrx)로 전체 종목 + 섹터 한 번에 적재
-def _krx_listing() -> int:
+def _krx(ds: str) -> int:
     from pykrx import stock
-    ds = _recent_trading_day()
-    if not ds:
-        return 0
     count = 0
     for market in ("KOSPI", "KOSDAQ"):
         try:
@@ -165,7 +162,7 @@ def _krx_listing() -> int:
 
 
 # 네이버 금융 API로 전체 종목 가져오기
-def _naver_listing() -> int:
+def _naver() -> int:
     count = 0
     seen: set[str] = set()
     page = 1
@@ -189,13 +186,13 @@ def _naver_listing() -> int:
 
     # 시장 구분: 네이버 개별 종목 API로 보정 (상위 종목만)
     # 나머지는 빈 문자열 → 프론트에서 표시 안 함
-    _markets(list(ALL_STOCKS.keys()))
+    _mkts(list(ALL_STOCKS.keys()))
     return count
 
 # 시장 구분 보정 — KRX로 시도 후 캐시 파일에 저장
 _MARKET_CACHE = Path(__file__).parent.parent / "trades" / "market_cache.json"
 
-def _markets(codes: list[str]) -> None:
+def _mkts(codes: list[str]) -> None:
     # 1차: 캐시 파일에서 복원
     if _MARKET_CACHE.exists():
         try:
@@ -240,24 +237,36 @@ def _markets(codes: list[str]) -> None:
 # 전체 상장 종목 메타 적재 (1회 로드 + 동시성 가드)
 def listing(*, force: bool = False) -> None:
     global _loaded
+    # 빠른 경로: 락 진입 없이 1차 체크
+    if _loaded and not force:
+        return
+
+    # 무거운 네트워크 IO(_day0)는 락 밖에서 — 락 점유 시간 단축
+    # 동시 호출 시 _day0가 중복 실행될 수 있으나 read-only이므로 안전
+    ds = _day0()
+
     with _lock:
+        # double-checked locking: 다른 스레드가 이미 완료했을 수 있음
         if _loaded and not force:
             return
 
         # 1차: KRX(pykrx) — 종목명 + 업종 동시 수집
-        try:
-            count = _krx_listing()
-            if count > 100:
-                logger.info("Loaded %s stocks via KRX (pykrx) with sectors", count)
-                _loaded = True
-                return
-            logger.warning("KRX listing returned %s — falling back to Naver", count)
-        except Exception as e:
-            logger.warning("KRX listing failed: %s — falling back to Naver", type(e).__name__)
+        if ds:
+            try:
+                count = _krx(ds)
+                if count > 100:
+                    logger.info("Loaded %s stocks via KRX (pykrx) with sectors", count)
+                    _loaded = True
+                    return
+                logger.warning("KRX listing returned %s — falling back to Naver", count)
+            except Exception as e:
+                logger.warning("KRX listing failed: %s — falling back to Naver", type(e).__name__)
+        else:
+            logger.warning("KRX trading day probe failed — falling back to Naver")
 
         # 2차: 네이버 금융
         try:
-            count = _naver_listing()
+            count = _naver()
             if count > 0:
                 logger.info("Loaded %s stocks via Naver API (no sector)", count)
                 _loaded = True
@@ -265,11 +274,10 @@ def listing(*, force: bool = False) -> None:
         except Exception as e:
             logger.warning("Naver listing failed: %s", type(e).__name__)
 
-        # 3차: 하드코딩 폴백
+        # 3차: 하드코딩 폴백 — _loaded 미설정으로 다음 호출 때 재시도 가능
         for code, name in NAMES.items():
             ALL_STOCKS[code] = {"name": name, "market": "KOSPI", "sector": "기타"}
-        logger.warning("Using hardcoded %s stocks as fallback", len(NAMES))
-        _loaded = True
+        logger.warning("Using hardcoded %s stocks as fallback (will retry on next call)", len(NAMES))
 
 # 코드와 이름으로 종목 검색
 def search(query: str) -> list[dict[str, str]]:

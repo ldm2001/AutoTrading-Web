@@ -17,7 +17,7 @@
 	let todayTrades = $state(0);
 	let loading = $state(true);
 
-	async function load() {
+	async function pull() {
 		loading = true;
 		try {
 			const [portRes, histRes] = await Promise.all([
@@ -38,10 +38,10 @@
 		loading = false;
 	}
 
-	$effect(() => { load(); });
+	$effect(() => { pull(); });
 
 	const totalReturn = $derived(totalEval > 0 ? ((totalPL / (totalEval - totalPL)) * 100) : 0);
-	const plClass = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
+	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
 
 	const winners = $derived(holdings.filter(h => h.profit_loss > 0));
 	const losers  = $derived(holdings.filter(h => h.profit_loss < 0));
@@ -55,10 +55,10 @@
 		<div class="pp-hero">
 			<div class="pp-hero-main">
 				<span class="pp-hero-label">총 평가손익</span>
-				<span class="pp-hero-value {plClass(totalPL)}">
+				<span class="pp-hero-value {tone(totalPL)}">
 					{totalPL > 0 ? '+' : ''}{totalPL.toLocaleString()}원
 				</span>
-				<span class="pp-hero-pct {plClass(totalReturn)}">
+				<span class="pp-hero-pct {tone(totalReturn)}">
 					({totalReturn > 0 ? '+' : ''}{totalReturn.toFixed(2)}%)
 				</span>
 			</div>
@@ -94,11 +94,11 @@
 							<span class="pp-bar-name">{h.name}</span>
 							<div class="pp-bar-track">
 								<div
-									class="pp-bar-fill {plClass(h.profit_loss_percent)}"
+									class="pp-bar-fill {tone(h.profit_loss_percent)}"
 									style="width: {width}%"
 								></div>
 							</div>
-							<span class="pp-bar-value {plClass(h.profit_loss_percent)}">
+							<span class="pp-bar-value {tone(h.profit_loss_percent)}">
 								{h.profit_loss_percent > 0 ? '+' : ''}{h.profit_loss_percent.toFixed(2)}%
 							</span>
 						</div>

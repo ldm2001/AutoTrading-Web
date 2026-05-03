@@ -6,7 +6,7 @@ export const newsSentiment = writable<NewsSentiment | null>(null);
 export const dailyReport = writable<string | null>(null);
 export const aiLoading = writable<boolean>(false);
 
-export async function fetchAISignal(code: string) {
+export async function aisig(code: string) {
 	aiSignal.set(null);
 	aiLoading.set(true);
 	try {
@@ -38,7 +38,7 @@ export async function fetchAISignal(code: string) {
 	}
 }
 
-export async function fetchNewsSentiment(code: string) {
+export async function moodq(code: string) {
 	try {
 		const resp = await fetch(`/api/ai/news/${code}`);
 		if (resp.ok) {
@@ -51,7 +51,7 @@ export async function fetchNewsSentiment(code: string) {
 	}
 }
 
-export async function fetchDailyReport() {
+export async function rptq() {
 	try {
 		const resp = await fetch('/api/ai/report');
 		if (resp.ok) {

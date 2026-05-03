@@ -1,6 +1,6 @@
 <script lang="ts">
 	// 섹터 히트맵 — 포트폴리오 섹터별 비중/수익률 트리맵
-	import { heatmapData, heatmapLoading, heatmapError, fetchHeatmap } from '$lib/stores/trading';
+	import { heatmapData, heatmapLoading, heatmapError, heatq } from '$lib/stores/trading';
 	import type { SectorCell } from '$lib/types';
 	import './SectorHeatmap.css';
 
@@ -11,7 +11,7 @@
 	$effect(() => {
 		if (!fetched) {
 			fetched = true;
-			fetchHeatmap();
+			heatq();
 		}
 	});
 
@@ -38,7 +38,7 @@
 	const totalStocks = $derived($heatmapData.reduce((sum, s) => sum + s.stocks.length, 0));
 
 	// 수익률→색상 변환 (빨강=수익, 파랑=손실)
-	function cellColor(ret: number): string {
+	function hue(ret: number): string {
 		if (ret > 0) {
 			const intensity = Math.min(ret / 5, 1);
 			return `rgba(239, 68, 68, ${0.3 + intensity * 0.7})`;
@@ -50,15 +50,15 @@
 		return '#6b7280';
 	}
 
-	function showTooltip(e: MouseEvent, cell: SectorCell) {
+	function tip(e: MouseEvent, cell: SectorCell) {
 		tooltip = { x: e.clientX + 12, y: e.clientY + 12, cell };
 	}
 
-	function hideTooltip() {
+	function notip() {
 		tooltip = null;
 	}
 
-	function retry() {
+	function again() {
 		fetched = false;
 	}
 </script>
@@ -72,7 +72,7 @@
 	{:else if $heatmapError}
 		<div class="heatmap-empty">
 			<div>{$heatmapError}</div>
-			<button class="btn-retry" onclick={retry}>다시 시도</button>
+			<button class="btn-retry" onclick={again}>다시 시도</button>
 		</div>
 	{:else if $heatmapData.length === 0}
 		<div class="heatmap-empty">보유 종목이 없습니다.</div>
@@ -90,9 +90,9 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="heatmap-cell"
-							style="flex-grow: {cell.weight_pct}; background-color: {cellColor(cell.avg_return)}"
-							onmouseenter={(e) => showTooltip(e, cell)}
-							onmouseleave={hideTooltip}
+							style="flex-grow: {cell.weight_pct}; background-color: {hue(cell.avg_return)}"
+							onmouseenter={(e) => tip(e, cell)}
+							onmouseleave={notip}
 						>
 							<span class="heatmap-sector">{cell.sector}</span>
 							<span class="heatmap-weight">{cell.weight_pct.toFixed(1)}%</span>

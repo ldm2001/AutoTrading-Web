@@ -10,7 +10,7 @@ export interface Toast {
 let nextId = 0;
 export const toasts = writable<Toast[]>([]);
 
-export function toast(message: string, type: Toast['type'] = 'info', duration = 3000) {
+export function pop(message: string, type: Toast['type'] = 'info', duration = 3000) {
 	const id = nextId++;
 	toasts.update(list => [...list, { id, type, message }]);
 	setTimeout(() => {
@@ -18,5 +18,5 @@ export function toast(message: string, type: Toast['type'] = 'info', duration = 
 	}, duration);
 }
 
-export function toastSuccess(message: string) { toast(message, 'success'); }
-export function toastError(message: string) { toast(message, 'error', 5000); }
+export function ok(message: string) { pop(message, 'success'); }
+export function bad(message: string) { pop(message, 'error', 5000); }

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { priceConnected, tradeConnected } from '$lib/stores/websocket';
-	import { tradingStatus, startBot, stopBot } from '$lib/stores/trading';
+	import { tradingStatus, bon, boff } from '$lib/stores/trading';
+	import { bad, ok } from '$lib/stores/toast';
 	import './Header.css';
 
 	let { onmenu }: { onmenu?: () => void } = $props();
@@ -17,14 +18,20 @@
 		now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 	);
 
-	async function toggleBot() {
+	async function flip() {
+		const wasRunning = $tradingStatus.is_running;
 		switching = true;
-		if ($tradingStatus.is_running) {
-			await stopBot();
-		} else {
-			await startBot();
+		try {
+			const result = wasRunning ? await boff() : await bon();
+
+			if (result.ok) {
+				ok(wasRunning ? '전체 자동매매를 중지했습니다.' : '전체 자동매매를 시작했습니다.');
+			} else {
+				bad(result.error ?? '자동매매 상태 변경에 실패했습니다.');
+			}
+		} finally {
+			switching = false;
 		}
-		switching = false;
 	}
 </script>
 
@@ -52,7 +59,8 @@
 		<button
 			class="trading-toggle"
 			class:active={$tradingStatus.is_running}
-			onclick={toggleBot}
+			type="button"
+			onclick={flip}
 			disabled={switching}
 		>
 			<span class="toggle-track">

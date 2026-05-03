@@ -22,7 +22,7 @@
 	let data = $state<Portfolio | null>(null);
 	let loading = $state(true);
 
-	async function load() {
+	async function pull() {
 		loading = true;
 		try {
 			const res = await fetch(API);
@@ -33,10 +33,10 @@
 		loading = false;
 	}
 
-	$effect(() => { load(); });
+	$effect(() => { pull(); });
 
 	const totalAsset = $derived(data ? data.total_eval + data.cash_balance : 0);
-	const plClass = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
+	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
 </script>
 
 <div class="hp-wrap">
@@ -52,7 +52,7 @@
 			</div>
 			<div class="hp-card">
 				<span class="hp-label">총 손익</span>
-				<strong class={plClass(data.total_profit_loss)}>
+				<strong class={tone(data.total_profit_loss)}>
 					{data.total_profit_loss > 0 ? '+' : ''}{data.total_profit_loss.toLocaleString()}원
 				</strong>
 			</div>
@@ -89,10 +89,10 @@
 						<td class="r mono">{h.avg_price.toLocaleString()}</td>
 						<td class="r mono">{h.current_price.toLocaleString()}</td>
 						<td class="r mono">{h.eval_amount.toLocaleString()}</td>
-						<td class="r mono {plClass(h.profit_loss)}">
+						<td class="r mono {tone(h.profit_loss)}">
 							{h.profit_loss > 0 ? '+' : ''}{h.profit_loss.toLocaleString()}
 						</td>
-						<td class="r mono {plClass(h.profit_loss_percent)}">
+						<td class="r mono {tone(h.profit_loss_percent)}">
 							{h.profit_loss_percent > 0 ? '+' : ''}{h.profit_loss_percent.toFixed(2)}%
 						</td>
 					</tr>

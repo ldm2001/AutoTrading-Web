@@ -15,7 +15,7 @@
 	let data = $state<VolData | null>(null);
 	let loading = $state(true);
 
-	async function load() {
+	async function pull() {
 		loading = true;
 		try {
 			const res = await fetch(`/api/stocks/${code}/volatility`);
@@ -26,16 +26,16 @@
 		loading = false;
 	}
 
-	$effect(() => { code; load(); });
+	$effect(() => { code; pull(); });
 
-	const gradeColor = (g: string) => {
+	const hue = (g: string) => {
 		if (g === '매우높음') return '#dc2626';
 		if (g === '높음') return '#ea580c';
 		if (g === '보통') return '#d97706';
 		return '#059669';
 	};
 
-	const rsiZone = (v: number | null) => {
+	const rsiz = (v: number | null) => {
 		if (v == null) return { label: '-', color: '#9ca3af' };
 		if (v >= 70) return { label: '과매수', color: '#dc2626' };
 		if (v <= 30) return { label: '과매도', color: '#2563eb' };
@@ -51,7 +51,7 @@
 	{:else}
 		<div class="vp-hero">
 			<span class="vp-hero-label">변동성 등급</span>
-			<span class="vp-hero-grade" style="color: {gradeColor(data.volatility_grade)}">
+			<span class="vp-hero-grade" style="color: {hue(data.volatility_grade)}">
 				{data.volatility_grade}
 			</span>
 		</div>
@@ -77,7 +77,7 @@
 			<div class="vp-card">
 				<span class="vp-label">RSI (14)</span>
 				<strong>{data.rsi ?? '-'}</strong>
-				<span class="vp-sub" style="color: {rsiZone(data.rsi).color}">{rsiZone(data.rsi).label}</span>
+				<span class="vp-sub" style="color: {rsiz(data.rsi).color}">{rsiz(data.rsi).label}</span>
 			</div>
 		</div>
 

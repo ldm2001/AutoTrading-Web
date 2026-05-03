@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { newsSentiment, fetchNewsSentiment } from '$lib/stores/ai';
+	import { newsSentiment, moodq } from '$lib/stores/ai';
 	import { selectedStock } from '$lib/stores/stocks';
 	import './NewsPanel.css';
 
@@ -7,17 +7,17 @@
 	$effect(() => {
 		const code = $selectedStock;
 		if (code && $newsSentiment?.code !== code) {
-			fetchNewsSentiment(code);
+			moodq(code);
 		}
 	});
 
-	function sentimentColor(score: number): string {
+	function tone(score: number): string {
 		if (score > 20) return 'positive';
 		if (score < -20) return 'negative';
 		return 'neutral';
 	}
 
-	function sentimentLabel(sentiment: string): string {
+	function feel(sentiment: string): string {
 		switch (sentiment) {
 			case 'positive': return '긍정';
 			case 'negative': return '부정';
@@ -46,8 +46,8 @@
 				<div class="news-item">
 					<span class="news-sentiment-dot" class:positive={article.sentiment === 'positive'} class:negative={article.sentiment === 'negative'} class:neutral={article.sentiment === 'neutral'}></span>
 					<span class="news-title">{article.title}</span>
-					<span class="news-article-sentiment {sentimentColor(article.score)}">
-						{sentimentLabel(article.sentiment)}
+					<span class="news-article-sentiment {tone(article.score)}">
+						{feel(article.sentiment)}
 					</span>
 				</div>
 			{/each}

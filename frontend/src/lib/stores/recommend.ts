@@ -7,13 +7,13 @@ export const recommendRefreshing = writable(false);
 
 let _enhanceTimer: ReturnType<typeof setTimeout> | null = null;
 
-function applyResponse(payload: RecommendResponse) {
+function recset(payload: RecommendResponse) {
 	recommendations.set(payload.items);
 	recommendLoading.set(payload.loading);
 	recommendRefreshing.set(payload.refreshing);
 }
 
-export async function fetchRecommendations(options?: { silent?: boolean }) {
+export async function recq(options?: { silent?: boolean }) {
 	if (!options?.silent) {
 		recommendLoading.set(true);
 		recommendRefreshing.set(false);
@@ -29,10 +29,10 @@ export async function fetchRecommendations(options?: { silent?: boolean }) {
 			const payload: RecommendResponse = Array.isArray(data)
 				? { items: data as RecommendStock[], loading: false, refreshing: false }
 				: data;
-			applyResponse(payload);
+			recset(payload);
 			if (payload.loading || payload.refreshing) {
 				_enhanceTimer = setTimeout(async () => {
-					await fetchRecommendations({ silent: true });
+					await recq({ silent: true });
 				}, 5_000);
 			}
 		}

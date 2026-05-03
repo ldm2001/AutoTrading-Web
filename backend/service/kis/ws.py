@@ -121,7 +121,7 @@ class KISWS:
             await self.close()
             if not want:
                 return
-            self._task = asyncio.create_task(self._run())
+            self._task = asyncio.create_task(self.loop())
 
     # 연결을 닫는다
     async def close(self) -> None:
@@ -144,7 +144,7 @@ class KISWS:
                 pass
 
     # 구독 메시지를 만든다
-    def _msg(self, key: str, code: str) -> dict:
+    def msg(self, key: str, code: str) -> dict:
         return {
             "header": {
                 "approval_key": key,
@@ -161,7 +161,7 @@ class KISWS:
         }
 
     # 실시간 시간값을 datetime 으로 바꾼다
-    def _ts(self, row: dict) -> dt.datetime:
+    def ts(self, row: dict) -> dt.datetime:
         day = row.get("BSOP_DATE", "")
         hour = row.get("STCK_CNTG_HOUR", "")
         if len(day) == 8 and len(hour) == 6:
@@ -172,7 +172,7 @@ class KISWS:
         return dt.datetime.now()
 
     # 실시간 row 를 공통 시세 shape 로 바꾼다
-    def _row(self, row: dict) -> dict | None:
+    def row(self, row: dict) -> dict | None:
         code = str(row.get("MKSC_SHRN_ISCD", "")).zfill(6)
         if not code:
             return None
@@ -201,8 +201,8 @@ class KISWS:
         }
 
     # 실시간 tick 을 처리한다
-    async def _tick(self, row: dict) -> None:
-        item = self._row(row)
+    async def tick(self, row: dict) -> None:
+        item = self.row(row)
         if item is None:
             return
 
@@ -213,11 +213,11 @@ class KISWS:
             code,
             item["price"],
             int(row.get("CNTG_VOL", 0) or 0),
-            self._ts(row),
+            self.ts(row),
         )
 
     # 시스템 메시지를 처리한다
-    async def _ack(self, raw: str) -> None:
+    async def ack(self, raw: str) -> None:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -239,7 +239,7 @@ class KISWS:
             logger.info("KIS WS ack tr=%s code=%s msg=%s", tr_id, code, text)
 
     # 수신 raw 를 분해한다
-    async def _feed(self, raw: str) -> None:
+    async def feed(self, raw: str) -> None:
         if not raw:
             return
 
@@ -256,28 +256,28 @@ class KISWS:
                 if len(body) < end:
                     break
                 row = dict(zip(_COLS, body[start:end]))
-                await self._tick(row)
+                await self.tick(row)
             return
 
-        await self._ack(raw)
+        await self.ack(raw)
 
     # 실제 연결 루프
-    async def _run(self) -> None:
+    async def loop(self) -> None:
         wait = 1.0
         while self._task is not None:
             try:
                 key = await self.auth.approval()
-                url = f"{self.auth.ws_url()}{_TRY}"
+                url = f"{self.auth.wsurl()}{_TRY}"
                 async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
                     self._ws = ws
                     self._codes = self._want
                     for code in self._codes:
-                        await ws.send(json.dumps(self._msg(key, code)))
+                        await ws.send(json.dumps(self.msg(key, code)))
                         await asyncio.sleep(_GAP)
                     logger.info("KIS WS open (%s symbols)", len(self._codes))
 
                     async for raw in ws:
-                        await self._feed(raw)
+                        await self.feed(raw)
             except asyncio.CancelledError:
                 raise
             except Exception as err:

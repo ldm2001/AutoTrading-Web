@@ -2,14 +2,14 @@
 	import {
 		allStocks,
 		selectedStock,
-		searchSuggestions,
+		hintq,
 		type SearchSuggestion
 	} from '$lib/stores/stocks';
 	import {
 		recommendations,
 		recommendLoading,
 		recommendRefreshing,
-		fetchRecommendations
+		recq
 	} from '$lib/stores/recommend';
 	import { tradingStatus, watchCodes } from '$lib/stores/trading';
 	import type { RecommendStock } from '$lib/types';
@@ -45,13 +45,13 @@
 	const totalHeight = $derived(filteredStocks.length * ITEM_HEIGHT);
 	const offsetY = $derived(virtualStart * ITEM_HEIGHT);
 
-	function handleScroll(e: Event) {
+	function scroll(e: Event) {
 		const el = e.target as HTMLDivElement;
 		scrollTop = el.scrollTop;
 		containerHeight = el.clientHeight;
 	}
 
-	function handleInput() {
+	function input() {
 		searchError = '';
 		clearTimeout(debounceTimer);
 		const q = searchInput.trim();
@@ -61,18 +61,18 @@
 			return;
 		}
 		debounceTimer = setTimeout(async () => {
-			suggestions = await searchSuggestions(q);
+			suggestions = await hintq(q);
 			showSuggestions = suggestions.length > 0;
 		}, 300);
 	}
 
-	function pickSuggestion(item: SearchSuggestion) {
+	function pick(item: SearchSuggestion) {
 		showSuggestions = false;
 		searchInput = '';
 		selectedStock.set(item.code);
 	}
 
-	function handleSearch(e: SubmitEvent) {
+	function query(e: SubmitEvent) {
 		e.preventDefault();
 		const q = searchInput.trim().toLowerCase();
 		if (!q) return;
@@ -88,7 +88,7 @@
 		}
 	}
 
-	function handleBlur() {
+	function blur() {
 		setTimeout(() => (showSuggestions = false), 200);
 	}
 
@@ -96,18 +96,18 @@
 		selectedStock.set(code);
 	}
 
-	function openRecModal(rec: RecommendStock) {
+	function modal(rec: RecommendStock) {
 		selectedStock.set(rec.code);
 		recModal = rec;
 	}
 
-	function signalLabel(signal: string): string {
+	function sig(signal: string): string {
 		if (signal === 'buy') return '매수';
 		if (signal === 'sell') return '매도';
 		return '관망';
 	}
 
-	function signalNarrative(rec: RecommendStock): string {
+	function note(rec: RecommendStock): string {
 		const s = rec.signal;
 		const score = rec.score.toFixed(0);
 		const factors = rec.factors ?? [];
@@ -129,7 +129,7 @@
 		return `종합 스코어 ${score}점으로 관망 구간입니다.${detail ? ' ' + detail + '.' : ''}`;
 	}
 
-	function fmtPrice(n: number): string {
+	function won(n: number): string {
 		return n.toLocaleString('ko-KR');
 	}
 </script>
@@ -142,12 +142,12 @@
 		</div>
 
 		<div class="watchlist-search">
-			<form onsubmit={handleSearch} class="search-form">
+			<form onsubmit={query} class="search-form">
 				<input
 					bind:value={searchInput}
-					oninput={handleInput}
-					onfocus={handleInput}
-					onblur={handleBlur}
+					oninput={input}
+					onfocus={input}
+					onblur={blur}
 					type="text"
 					placeholder="종목명/코드 검색..."
 					class="search-input"
@@ -165,7 +165,7 @@
 						<button
 							type="button"
 							class="suggestion-item"
-							onclick={() => pickSuggestion(item)}
+							onclick={() => pick(item)}
 						>
 							<span class="suggestion-name">{item.name}</span>
 							<span class="suggestion-code">{item.code}</span>
@@ -179,7 +179,7 @@
 			{/if}
 		</div>
 
-		<div class="stock-list" bind:this={scrollContainer} onscroll={handleScroll}>
+		<div class="stock-list" bind:this={scrollContainer} onscroll={scroll}>
 			<div style="height:{totalHeight}px;position:relative">
 				<div style="transform:translateY({offsetY}px)">
 					{#each virtualItems as stock (stock.code)}
@@ -221,7 +221,7 @@
 						<span class="recommend-stage-badge pending">예측 계산중</span>
 					{/if}
 				</div>
-			<button class="refresh-btn" onclick={() => fetchRecommendations()} disabled={$recommendLoading}>
+			<button class="refresh-btn" onclick={() => recq()} disabled={$recommendLoading}>
 				{$recommendLoading ? '분석중' : '새로고침'}
 			</button>
 		</div>
@@ -239,7 +239,7 @@
 					<button
 						class="stock-item recommend-item"
 						class:selected={$selectedStock === rec.code}
-						onclick={() => openRecModal(rec)}
+						onclick={() => modal(rec)}
 					>
 						<span class="stock-name">{rec.name}</span>
 						{#if rec.prediction}
@@ -251,7 +251,7 @@
 								{rec.prediction.change_pct > 0 ? "+" : ""}{rec.prediction.change_pct.toFixed(1)}%{rec.prediction.trend === "상승" ? "↑" : rec.prediction.trend === "하락" ? "↓" : "→"}
 							</span>
 						{/if}
-						<span class="rec-signal {rec.signal}">{signalLabel(rec.signal)}</span>
+						<span class="rec-signal {rec.signal}">{sig(rec.signal)}</span>
 					</button>
 				{/each}
 			{/if}
@@ -270,13 +270,13 @@
 		<div class="rec-modal-body">
 			<!-- 시그널 + 점수 + 현재가 -->
 			<div class="rec-modal-signal-row">
-				<span class="rec-modal-signal {rec.signal}">{signalLabel(rec.signal)}</span>
+				<span class="rec-modal-signal {rec.signal}">{sig(rec.signal)}</span>
 				<span class="rec-modal-score">{rec.score > 0 ? '+' : ''}{rec.score.toFixed(0)}점 / 100</span>
-				<span class="rec-modal-price">{fmtPrice(rec.price)}원</span>
+				<span class="rec-modal-price">{won(rec.price)}원</span>
 			</div>
 
 			<!-- 종합 설명 문장 -->
-			<p class="rec-modal-narrative">{signalNarrative(rec)}</p>
+			<p class="rec-modal-narrative">{note(rec)}</p>
 
 			<!-- 팩터별 근거 -->
 			{#if rec.factors && rec.factors.length > 0}
@@ -313,13 +313,13 @@
 					<div class="rec-modal-pred-row">
 						<div class="rec-modal-pred-item">
 							<span class="rec-modal-pred-label">현재가</span>
-							<span class="rec-modal-pred-val">{fmtPrice(p.current_price)}원</span>
+							<span class="rec-modal-pred-val">{won(p.current_price)}원</span>
 						</div>
 						<span class="rec-modal-pred-arrow">→</span>
 						<div class="rec-modal-pred-item">
 							<span class="rec-modal-pred-label">5일 후 예측</span>
 							<span class="rec-modal-pred-val" class:pred-up={p.change_pct > 0} class:pred-down={p.change_pct < 0}>
-								{fmtPrice(p.predicted_5d)}원
+								{won(p.predicted_5d)}원
 							</span>
 						</div>
 						<span class="rec-modal-pred-badge" class:pred-up={p.change_pct > 0} class:pred-down={p.change_pct < 0}>

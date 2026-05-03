@@ -1,15 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
-	import { tradingStatus, addConsoleMessage, authHeaders } from '$lib/stores/trading';
-	import { toastSuccess, toastError } from '$lib/stores/toast';
+	import { tradingStatus, logmsg, hdrs } from '$lib/stores/trading';
+	import { bad, ok } from '$lib/stores/toast';
 	import type { OrderBook } from '$lib/types';
 	import './OrderPanel.css';
 
 	let { onclose }: { onclose?: () => void } = $props();
 
 	let tab      = $state<'buy' | 'sell'>('buy');
-	let histTab  = $state<'done' | 'pending'>('done');
 	let qty      = $state(0);
 	let price    = $state(0);
 	let loading  = $state(false);
@@ -39,17 +38,17 @@
 		price = currentPrice;
 		qty   = 0;
 		result = null;
-		if (code) loadBook(code);
+		if (code) bookq(code);
 	});
 
-	async function loadBook(code: string) {
+	async function bookq(code: string) {
 		try {
 			const r = await fetch(`/api/stocks/${code}/orderbook`);
 			if (r.ok) book = await r.json();
 		} catch { /* ignore */ }
 	}
 
-	async function loadCash() {
+	async function cashq() {
 		try {
 			const r = await fetch('/api/trading/balance');
 			if (r.ok) { const d = await r.json(); cash = d.cash ?? 0; }
@@ -57,54 +56,54 @@
 	}
 
 	onMount(() => {
-		loadCash();
+		cashq();
 		bookTimer = setInterval(() => {
-			if ($selectedStock) loadBook($selectedStock);
+			if ($selectedStock) bookq($selectedStock);
 		}, 3000);
 		return () => { if (bookTimer) clearInterval(bookTimer); };
 	});
 
 	// 호가 클릭 -> 가격 자동 입력
-	function pickPrice(p: number) { price = p; }
+	function px(p: number) { price = p; }
 
 	// 수량 비율 설정 (잔고 기준)
-	function setQtyPct(pct: number) {
+	function qtyr(pct: number) {
 		if (!price || !cash) return;
 		qty = Math.max(1, Math.floor(cash * pct / price));
 	}
 
 	// 최대 거래량 기준 bar width
-	function barWidth(vol: number, side: 'ask' | 'bid'): number {
+	function bar(vol: number, side: 'ask' | 'bid'): number {
 		if (!book) return 0;
 		const list = side === 'ask' ? book.asks : book.bids;
 		const max  = Math.max(...list.map(l => l.volume), 1);
 		return Math.round(vol / max * 100);
 	}
 
-	async function submit() {
+	async function send() {
 		if (!$selectedStock || qty <= 0 || price <= 0) return;
 		loading = true;
 		result  = null;
 		try {
 			const resp = await fetch(`/api/trading/${tab}`, {
 				method:  'POST',
-				headers: authHeaders(),
+				headers: hdrs(),
 				body:    JSON.stringify({ code: $selectedStock, qty }),
 			});
 			const data = await resp.json();
 			if (resp.ok && data.success) {
 				const label = tab === 'buy' ? '매수' : '매도';
-				result = { type: 'success', msg: `${label} 성공: ${stockInfo?.name ?? ''} ${qty}주` };
-				toastSuccess(`${label} 성공: ${stockInfo?.name ?? ''} ${qty}주`);
-				addConsoleMessage(`[수동 ${label}] ${stockInfo?.name ?? $selectedStock} ${qty}주`);
-				await loadCash();
+				result = { type: 'success', msg: `시장가 ${label} 접수: ${stockInfo?.name ?? ''} ${qty}주` };
+				ok(`시장가 ${label} 접수: ${stockInfo?.name ?? ''} ${qty}주`);
+				logmsg(`[수동 시장가 ${label}] ${stockInfo?.name ?? $selectedStock} ${qty}주`);
+				await cashq();
 			} else {
 				result = { type: 'error', msg: data.detail || '주문 실패' };
-				toastError(data.detail || '주문 실패');
+				bad(data.detail || '주문 실패');
 			}
 		} catch {
 			result = { type: 'error', msg: '네트워크 오류' };
-			toastError('네트워크 오류');
+			bad('네트워크 오류');
 		} finally {
 			loading = false;
 		}
@@ -138,8 +137,8 @@
 				<!-- 매도호가 (위=높은가격) -->
 				{#if book}
 					{#each book.asks as row}
-						<button class="ob-row ask" onclick={() => pickPrice(row.price)}>
-							<span class="ob-bar ask" style="width:{barWidth(row.volume,'ask')}%"></span>
+						<button class="ob-row ask" onclick={() => px(row.price)}>
+							<span class="ob-bar ask" style="width:{bar(row.volume,'ask')}%"></span>
 							<span class="ob-price ask">{fmt(row.price)}</span>
 							<span class="ob-vol">{fmt(row.volume)}</span>
 						</button>
@@ -163,8 +162,8 @@
 				<!-- 매수호가 (위=높은가격) -->
 				{#if book}
 					{#each book.bids as row}
-						<button class="ob-row bid" onclick={() => pickPrice(row.price)}>
-							<span class="ob-bar bid" style="width:{barWidth(row.volume,'bid')}%"></span>
+						<button class="ob-row bid" onclick={() => px(row.price)}>
+							<span class="ob-bar bid" style="width:{bar(row.volume,'bid')}%"></span>
 							<span class="ob-price bid">{fmt(row.price)}</span>
 							<span class="ob-vol">{fmt(row.volume)}</span>
 						</button>
@@ -185,19 +184,15 @@
 						<button class="of-tab" class:active={tab==='sell'} class:sell={tab==='sell'} onclick={() => tab='sell'}>매도</button>
 					</div>
 
-					<!-- 가격 -->
+					<!-- 예상가 -->
 					<div class="of-row">
-						<span class="of-label">가격</span>
+						<span class="of-label">예상가</span>
 						<div class="of-input-wrap">
-							<input type="number" bind:value={price} class="of-input" min="0" />
+							<input type="number" bind:value={price} class="of-input" min="0" readonly />
 							<span class="of-unit">원</span>
-							<div class="of-arrows">
-								<button onclick={() => price += 1}>∧</button>
-								<button onclick={() => price = Math.max(0, price - 1)}>∨</button>
-							</div>
 						</div>
 					</div>
-					<p class="of-hint">✓ [거래량 있음] 주문 시 체결 처리 됩니다</p>
+					<p class="of-hint">시장가 주문으로 접수되며 실제 체결가는 달라질 수 있습니다</p>
 
 					<!-- 수량 -->
 					<div class="of-row">
@@ -218,7 +213,7 @@
 					<!-- % 버튼 -->
 					<div class="of-pct-row">
 						{#each [10,25,50,100] as pct}
-							<button class="of-pct" onclick={() => setQtyPct(pct/100)}>{pct}%</button>
+							<button class="of-pct" onclick={() => qtyr(pct/100)}>{pct}%</button>
 						{/each}
 					</div>
 
@@ -236,10 +231,10 @@
 						class="of-submit"
 						class:buy={tab==='buy'}
 						class:sell={tab==='sell'}
-						onclick={submit}
+						onclick={send}
 						disabled={loading || qty <= 0}
 					>
-						{loading ? '처리중' : tab === 'buy' ? '매수' : '매도'}
+						{loading ? '처리중' : tab === 'buy' ? '시장가 매수' : '시장가 매도'}
 					</button>
 
 					{#if result}
@@ -267,32 +262,27 @@
 					{/if}
 				</div>
 
-				<!-- ── 체결/미체결 탭 (주문폼 바로 아래) ── -->
+				<!-- ── 거래 내역 (주문폼 바로 아래) ── -->
 				<div class="hist-tabs">
-					<button class="hist-tab" class:active={histTab==='done'} onclick={() => histTab='done'}>체결 내역</button>
-					<button class="hist-tab" class:active={histTab==='pending'} onclick={() => histTab='pending'}>미체결 내역</button>
+					<button class="hist-tab active">주문 내역</button>
 				</div>
 				<div class="hist-body">
-					{#if histTab === 'done'}
-						{#if $tradingStatus.today_trades.length === 0}
-							<div class="hist-empty">거래 내역이 없습니다</div>
-						{:else}
-							{#each $tradingStatus.today_trades as t}
-								<div class="hist-row">
-									<span class="hist-time">{t.time.split(' ')[1] ?? t.time}</span>
-									<span class="hist-type" class:buy={t.type==='buy'} class:sell={t.type==='sell'}>
-										{t.type === 'buy' ? '매수' : '매도'}
-									</span>
-									<span class="hist-name">{t.name || t.code}</span>
-									<span class="hist-qty">{t.qty}주</span>
-									<span class="hist-ok" class:ok={t.success} class:fail={!t.success}>
-										{t.success ? '체결' : '실패'}
-									</span>
-								</div>
-							{/each}
-						{/if}
+					{#if $tradingStatus.today_trades.length === 0}
+						<div class="hist-empty">거래 내역이 없습니다</div>
 					{:else}
-						<div class="hist-empty">미체결 내역이 없습니다</div>
+						{#each $tradingStatus.today_trades as t}
+							<div class="hist-row">
+								<span class="hist-time">{t.time.split(' ')[1] ?? t.time}</span>
+								<span class="hist-type" class:buy={t.type==='buy'} class:sell={t.type==='sell'}>
+									{t.type === 'buy' ? '매수' : '매도'}
+								</span>
+								<span class="hist-name">{t.name || t.code}</span>
+								<span class="hist-qty">{t.qty}주</span>
+								<span class="hist-ok" class:ok={t.success} class:fail={!t.success}>
+									{t.success ? '접수' : '실패'}
+								</span>
+							</div>
+						{/each}
 					{/if}
 				</div>
 			</div>

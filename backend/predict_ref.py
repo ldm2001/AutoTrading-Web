@@ -42,7 +42,7 @@ class RateLimiter:
         self.calls = []
     
     # 비동기 Rate Limit 대기
-    async def wait_async(self):
+    async def waita(self):
         now = time.time()
         self.calls = [call for call in self.calls if now - call < self.period]
         
@@ -194,7 +194,7 @@ MAJOR_KOREAN_STOCKS = {
 }
 
 # 비동기로 안전한 주식 목록 가져오기
-async def get_stocks_async() -> pd.DataFrame:
+async def stocksa() -> pd.DataFrame:
     global stock_list_cache, stock_list_cache_time
     
     current_time = datetime.now()
@@ -222,7 +222,7 @@ async def get_stocks_async() -> pd.DataFrame:
     return backup_df
 
 # 내부 사용
-def get_stocks() -> pd.DataFrame:
+def stocks0() -> pd.DataFrame:
     global stock_list_cache, stock_list_cache_time
     
     current_time = datetime.now()
@@ -247,9 +247,9 @@ def get_stocks() -> pd.DataFrame:
     return backup_df
 
 # 종목명 가져오기
-def get_name(symbol: str) -> str:
+def sname(symbol: str) -> str:
     try:
-        stock_list = get_stocks()
+        stock_list = stocks0()
         result = stock_list[stock_list['Code'] == symbol]
         if not result.empty:
             return result.iloc[0]['Name']
@@ -263,11 +263,11 @@ def get_name(symbol: str) -> str:
     return symbol
 
 # 한국 주식 검색
-def search_stock(query: str, limit: int = 20) -> List[Dict]:
+def stockq(query: str, limit: int = 20) -> List[Dict]:
     results = []
     
     try:
-        stock_list = get_stocks()
+        stock_list = stocks0()
         query_upper = query.strip().upper()
         
         # 코드 검색
@@ -311,7 +311,7 @@ def search_stock(query: str, limit: int = 20) -> List[Dict]:
     return results
 
 # 캐시를 활용한 데이터 가져오기
-def get_data_cached(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+def datac(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     cache_key = f"{symbol}_{start_date}_{end_date}"
     current_time = datetime.now()
     
@@ -322,13 +322,13 @@ def get_data_cached(symbol: str, start_date: str, end_date: str) -> pd.DataFrame
             return data_cache[cache_key]
     
     # 새로 가져오기
-    data = get_data(symbol, start_date, end_date)
+    data = dataq(symbol, start_date, end_date)
     data_cache[cache_key] = data
     data_cache_time[cache_key] = current_time
     return data
 
 # 데이터 수집 (FDR 우선)
-def get_data(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+def dataq(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     symbol = symbol.zfill(6)
     logger.info(f"데이터 수집: {symbol}")
     
@@ -361,7 +361,7 @@ def get_data(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     raise HTTPException(status_code=404, detail=f"데이터 수집 실패: {symbol}")
 
 # 데이터 준비 
-def prepare(stock_df: pd.DataFrame) -> pd.DataFrame:
+def prep(stock_df: pd.DataFrame) -> pd.DataFrame:
     # 기본 기술적 지표 추가
     stock_df['MA5'] = stock_df['Close'].rolling(window=5).mean()
     stock_df['MA20'] = stock_df['Close'].rolling(window=20).mean()
@@ -380,9 +380,9 @@ def prepare(stock_df: pd.DataFrame) -> pd.DataFrame:
     return stock_df
 
 # 트랜스포머 모델을 활용해서 주식 예측 (3일로)
-def train(symbol: str, stock_df: pd.DataFrame, epochs: int = 50) -> Dict:
+def fit(symbol: str, stock_df: pd.DataFrame, epochs: int = 50) -> Dict:
     # 데이터 준비
-    stock_df = prepare(stock_df)
+    stock_df = prep(stock_df)
     
     # 사용할 컬럼
     feature_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 
@@ -532,7 +532,7 @@ def train(symbol: str, stock_df: pd.DataFrame, epochs: int = 50) -> Dict:
 training_tasks = {}
 
 # 데이터 수집과 학습 분리
-async def run_async(task_id: str, symbols: List[str], start_date: str, end_date: str, epochs: int):
+async def runa(task_id: str, symbols: List[str], start_date: str, end_date: str, epochs: int):
     results = []
     
     # 1단계: 모든 데이터 먼저 수집 (병렬)
@@ -543,7 +543,7 @@ async def run_async(task_id: str, symbols: List[str], start_date: str, end_date:
     for symbol in symbols:
         data_tasks.append(
             asyncio.get_event_loop().run_in_executor(
-                executor, get_data_cached, symbol, start_date, end_date
+                executor, datac, symbol, start_date, end_date
             )
         )
     
@@ -558,7 +558,7 @@ async def run_async(task_id: str, symbols: List[str], start_date: str, end_date:
             training_tasks[task_id]['progress'][symbol] = 'Failed'
             results.append(StockPredictionResponse(
                 symbol=symbol,
-                name=get_name(symbol),
+                name=sname(symbol),
                 predictions={},
                 metrics={'MSE': -1, 'MAE': -1},
                 status=f'Data collection failed: {str(e)}'
@@ -571,10 +571,10 @@ async def run_async(task_id: str, symbols: List[str], start_date: str, end_date:
             
         try:
             training_tasks[task_id]['progress'][symbol] = 'Processing'
-            stock_name = get_name(symbol)
+            stock_name = sname(symbol)
             
             result = await asyncio.get_event_loop().run_in_executor(
-                executor, train, symbol, stock_data[symbol], epochs
+                executor, fit, symbol, stock_data[symbol], epochs
             )
             
             results.append(StockPredictionResponse(
@@ -592,7 +592,7 @@ async def run_async(task_id: str, symbols: List[str], start_date: str, end_date:
             logger.error(f"학습 실패 {symbol}: {e}")
             results.append(StockPredictionResponse(
                 symbol=symbol,
-                name=get_name(symbol),
+                name=sname(symbol),
                 predictions={},
                 metrics={'MSE': -1, 'MAE': -1},
                 status=f'Training failed: {str(e)}'
@@ -614,7 +614,7 @@ async def root():
 
 # 주식 목록 갱신
 @app.post("/refresh-list")
-async def refresh_list():
+async def refx():
     try:
         global stock_list_cache, stock_list_cache_time
         
@@ -622,7 +622,7 @@ async def refresh_list():
         stock_list_cache = None
         stock_list_cache_time = None
         
-        stock_list = await get_stocks_async()
+        stock_list = await stocksa()
         
         return {
             "message": "주식 목록 갱신 완료",
@@ -640,7 +640,7 @@ async def refresh_list():
 @app.get("/search/{query}")
 async def search(query: str, limit: int = 20):
     try:
-        results = search_stock(query, limit)
+        results = stockq(query, limit)
         
         if not results:
             raise HTTPException(
@@ -661,9 +661,9 @@ async def search(query: str, limit: int = 20):
 
 # 시장별 종목 목록
 @app.get("/stocks/{market}")
-async def get_by_market(market: str = "KOSPI", page: int = 1, size: int = 50):
+async def mktq(market: str = "KOSPI", page: int = 1, size: int = 50):
     try:
-        stock_list = get_stocks()
+        stock_list = stocks0()
         
         # 시장 필터링
         if market.upper() != "ALL":
@@ -699,9 +699,9 @@ async def get_by_market(market: str = "KOSPI", page: int = 1, size: int = 50):
 
 # 인기 종목
 @app.get("/popular")
-async def get_popular(limit: int = 20):
+async def popq(limit: int = 20):
     try:
-        stock_list = get_stocks()
+        stock_list = stocks0()
         
         # 상위 종목 선택
         stocks = []
@@ -741,7 +741,7 @@ async def predict(request: StockPredictionRequest, background_tasks: BackgroundT
     }
     
     background_tasks.add_task(
-        run_async,
+        runa,
         task_id,
         request.symbols,
         start_date,
@@ -757,7 +757,7 @@ async def predict(request: StockPredictionRequest, background_tasks: BackgroundT
 
 # 학습 상태 확인
 @app.get("/status/{task_id}")
-async def get_status(task_id: str):
+async def statq(task_id: str):
     if task_id not in training_tasks:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -771,7 +771,7 @@ async def get_status(task_id: str):
 
 # 단일 종목 즉시 예측 (캐싱 활용)
 @app.post("/predict-one/{symbol}")
-async def predict_one(
+async def pred1(
     symbol: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -781,12 +781,12 @@ async def predict_one(
         end_date = end_date or datetime.now().strftime('%Y-%m-%d')
         start_date = start_date or (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
         
-        stock_name = get_name(symbol)
+        stock_name = sname(symbol)
         
         # 캐싱된 데이터 우선 사용
-        stock_df = get_data_cached(symbol, start_date, end_date)
+        stock_df = datac(symbol, start_date, end_date)
         
-        result = train(symbol, stock_df, epochs)
+        result = fit(symbol, stock_df, epochs)
         
         return StockPredictionResponse(
             symbol=symbol,
@@ -801,7 +801,7 @@ async def predict_one(
 
 # 완료된 태스크 삭제
 @app.delete("/task/{task_id}")
-async def delete_task(task_id: str):
+async def taskx(task_id: str):
     if task_id in training_tasks:
         del training_tasks[task_id]
         return {"message": f"Task {task_id} deleted"}
@@ -810,7 +810,7 @@ async def delete_task(task_id: str):
 
 # 캐시 상태 확인
 @app.get("/cache")
-async def get_cache():
+async def cacheq():
     return {
         "stock_list_cache": {
             "cached": stock_list_cache is not None,
@@ -830,7 +830,7 @@ async def get_cache():
 
 # 캐시 클리어
 @app.post("/clear-cache")
-async def clear_cache():
+async def cachex():
     global data_cache, data_cache_time
     
     old_size = len(data_cache)

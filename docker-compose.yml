@@ -135,6 +135,8 @@ services:
     ports:
       - "3001:3000"
       - "443:3443"
+    environment:
+      - API_KEY=${API_KEY:?API_KEY must be set}
     volumes:
       - ./infra/certs:/etc/nginx/certs:ro
     depends_on:

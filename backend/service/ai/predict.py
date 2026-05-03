@@ -86,7 +86,7 @@ class Predictor:
         self._CACHE_TTL   = 3600  # 1시간
 
     # 1년치 주가 데이터 수집 (FDR 우선, YFinance 폴백)
-    def _fetch(self, symbol: str) -> pd.DataFrame:
+    def raw(self, symbol: str) -> pd.DataFrame:
         symbol     = symbol.zfill(6)
         end_date   = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
@@ -114,7 +114,7 @@ class Predictor:
         raise ValueError(f"데이터 수집 실패: {symbol}")
 
     # 피처 엔지니어링 (MA5, MA20, RSI, 변화율)
-    def _prepare(self, df: pd.DataFrame) -> pd.DataFrame:
+    def feat(self, df: pd.DataFrame) -> pd.DataFrame:
         df                  = df.copy()
         df["MA5"]           = df["Close"].rolling(window=5).mean()
         df["MA20"]          = df["Close"].rolling(window=20).mean()
@@ -130,7 +130,7 @@ class Predictor:
         return df
 
     # Transformer 학습 및 5일 예측
-    def _run(
+    def fit(
         self,
         symbol: str,
         forecast_days: int = 5,
@@ -138,8 +138,8 @@ class Predictor:
         sequence_length: int = 20,
     ) -> dict:
         start_t  = time.time()
-        stock_df = self._fetch(symbol)
-        stock_df = self._prepare(stock_df)
+        stock_df = self.raw(symbol)
+        stock_df = self.feat(stock_df)
 
         feature_cols   = ["Open", "High", "Low", "Close", "Volume", "MA5", "MA20", "Price_Change", "RSI"]
         available_cols = [c for c in feature_cols if c in stock_df.columns]
@@ -263,7 +263,7 @@ class Predictor:
             logger.info(f"캐시 사용: {symbol}")
             return cached
         loop   = asyncio.get_running_loop()
-        result = await loop.run_in_executor(self._executor, self._run, symbol)
+        result = await loop.run_in_executor(self._executor, self.fit, symbol)
         self._cache.set(symbol, result, self._CACHE_TTL)
         return result
 

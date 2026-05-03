@@ -17,10 +17,10 @@ class TTLCache:
         self._local: dict[str, tuple[float, Any]] = {}
         self._redis: redis.Redis | None = None
         self._access_count: int = 0
-        self._connect()
+        self.conn()
 
     # Redis 서버 연결 (실패 시 인메모리 폴백)
-    def _connect(self) -> None:
+    def conn(self) -> None:
         try:
             is_tls = settings.redis_url.startswith("rediss://")
             self._redis = redis.from_url(
@@ -37,7 +37,7 @@ class TTLCache:
             self._redis = None
 
     # 만료 엔트리 주기적 정리 (100회 get 마다 실행)
-    def _maybe_purge(self) -> None:
+    def purge(self) -> None:
         self._access_count += 1
         if self._access_count < 100:
             return
@@ -60,7 +60,7 @@ class TTLCache:
             except Exception:
                 pass
 
-        self._maybe_purge()
+        self.purge()
         entry = self._local.get(key)
         if entry is None:
             cache_miss.inc()
