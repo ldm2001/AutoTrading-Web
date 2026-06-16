@@ -286,23 +286,21 @@ class Scorer:
             }
 
     # 동적 손절 — FVG 구조적 손절가 우선, 폴백으로 고정 %
+    # 시세 조회 실패는 호출부로 전파 (fail-open 금지 — bot.risk가 카운터/경보 처리)
     async def sl(
         self, code: str, avg_price: int,
         structural_price: float | None = None,
         fallback_pct: float = -3.0,
     ) -> tuple[bool, float]:
-        try:
-            current = await self.broker.raw(code)
-            pnl = (current - avg_price) / avg_price * 100
+        current = await self.broker.raw(code)
+        pnl = (current - avg_price) / avg_price * 100
 
-            # 구조적 손절가가 있으면 그 가격 하회 시 손절
-            if structural_price and current < structural_price:
-                return True, pnl
+        # 구조적 손절가가 있으면 그 가격 하회 시 손절
+        if structural_price and current < structural_price:
+            return True, pnl
 
-            # 폴백: 고정 % 손절
-            return pnl <= fallback_pct, pnl
-        except Exception:
-            return False, 0.0
+        # 폴백: 고정 % 손절
+        return pnl <= fallback_pct, pnl
 
 
 # 모듈 레벨 싱글턴 인스턴스

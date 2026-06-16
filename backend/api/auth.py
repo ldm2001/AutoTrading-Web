@@ -62,10 +62,10 @@ def keyok(key: str | None) -> bool:
     return bool(key) and secrets.compare_digest(key, settings.api_key)
 
 
-# API Key 검증 의존성 (미설정 시 바이패스)
+# API Key 검증 의존성 — 미설정 시 매매 API 차단 (라우터 미등록의 2차 방어)
 async def guard(request: Request, key: str | None = Security(_header)) -> str:
     if not settings.api_key:
-        return "no-auth"
+        raise HTTPException(503, "Trading API disabled (API_KEY not set)")
 
     client_ip = request.client.host if request.client else "unknown"
     ban(client_ip)

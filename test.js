@@ -3,8 +3,8 @@ import { sleep, check } from 'k6';
 
 export const options = {
   stages: [
-    { duration: '20s', target: 100 }, // 20초 만에 100명으로 급증 
-    { duration: '1m',  target: 500 }, // 1분 동안 500명까지 밀어붙이기
+    { duration: '20s', target: 100 }, // 20초 100명으로 급증 
+    { duration: '1m',  target: 500 }, // 1분 동안 500명까지
     { duration: '20s', target: 0   }, // 20초 동안 종료
   ],
 };

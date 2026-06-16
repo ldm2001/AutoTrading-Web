@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import json
 import logging
+import time
 from collections.abc import Callable
 from config import settings
 from service.discord import notify
@@ -18,6 +19,9 @@ from service.event_bus import bus
 logger = logging.getLogger(__name__)
 
 _REDIS_BOT_KEY = "bot:state"
+
+# 예외 재시작 백오프 (초) — 길이 = 최대 재시도 횟수
+_BACKOFF = (30, 120, 600)
 
 # Bot 클래스 — 매수/손절/익절/장마감 자동매매 루프
 class Bot:
@@ -45,6 +49,9 @@ class Bot:
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
         self._last_regime_state: str | None = None
+        self._sl_fails: dict[str, int] = {}
+        self._risk_last: float = 0.0
+        self.crashed: bool = False
 
     # Redis에 봇 보유 상태 저장
     def snap(self) -> None:
@@ -74,9 +81,12 @@ class Bot:
         if self.running:
             return
         self.running = True
+        self.crashed = False
         self.bought = {}
         self.pending_buys = set()
         self.pending_stops = {}
+        self._sl_fails = {}
+        self._risk_last = 0.0
         self.redo()
         self.logs = trade_log_rows()
         await self.queue.start()
@@ -88,7 +98,7 @@ class Bot:
                 self._tick_event.set()
         self._unsub_tick = bus.on("tick", tickcb)
 
-        self._task = asyncio.create_task(self.loop())
+        self._task = asyncio.create_task(self.run())
         await self.msg("=== 자동매매 시작 ===")
 
     # 봇 중지 — tick 핸들러 해제 후 봇 루프 종료
@@ -106,6 +116,7 @@ class Bot:
     def status(self) -> dict:
         return {
             "is_running": self.running,
+            "crashed": self.crashed,
             "bought_list": list(self.bought.keys()),
             "today_trades": self.logs,
             "watch_count": len(self.scan()),
@@ -224,16 +235,49 @@ class Bot:
             await self.msg(f"[시장 국면] {state} — {regime['reason']}")
         return bool(regime["allow_new_buys"])
 
+    # 손절 평가 실패 누적 — 연속 3회 시 경보, 이후 20회마다 재경보
+    async def slfail(self, code: str, info: dict, err: Exception) -> None:
+        n = self._sl_fails.get(code, 0) + 1
+        self._sl_fails[code] = n
+        logger.warning("Stop-loss check failed (%s, consecutive=%s): %s", code, n, err)
+        if n % 20 == 3:
+            name = info.get("name") or self.names.get(code, code)
+            await self.msg(f"[손절 모니터링 장애] {name}({code}) 시세 조회 {n}회 연속 실패")
+
+    # 손절/익절 체크 게이트 — 최소 2초 간격 스로틀 (틱 이벤트 즉시 반응)
+    async def riskgate(self) -> None:
+        if not self.bought:
+            return
+        if time.monotonic() - self._risk_last < 2.0:
+            return
+        self._risk_last = time.monotonic()
+        await self.risk()
+
+    # 장중 여부 (평일 09:05~15:15) — KST 명시/공휴일 반영은 Phase 2에서
+    def hours(self) -> bool:
+        now = datetime.datetime.now()
+        if now.weekday() >= 5:
+            return False
+        t_start = now.replace(hour=9, minute=5, second=0, microsecond=0)
+        t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
+        return t_start <= now < t_sell
+
     # 손절/익절 모니터링 (동적 손절 지원)
     async def risk(self) -> None:
         for code, info in list(self.bought.items()):
             try:
                 sp = info.get("stop_price")
-                should_stop, pnl = await sl(
-                    code, info["avg_price"],
-                    structural_price=sp,
-                    fallback_pct=settings.stop_loss_pct,
-                )
+                try:
+                    should_stop, pnl = await sl(
+                        code, info["avg_price"],
+                        structural_price=sp,
+                        fallback_pct=settings.stop_loss_pct,
+                    )
+                except Exception as err:
+                    await self.slfail(code, info, err)
+                    continue
+                self._sl_fails.pop(code, None)
+
                 if should_stop:
                     label = f"구조적 {sp:,.0f}" if sp else f"{settings.stop_loss_pct}%"
                     await self.msg(
@@ -322,7 +366,38 @@ class Bot:
                 self.pending_buys.discard(sym)
                 self.pending_stops.pop(sym, None)
 
-    # 메인 루프 
+    # 슈퍼바이저 — loop 예외 시 경보 + 바운드 재시작 (장중 한정), 종료 시 구독 정리
+    async def run(self) -> None:
+        attempts = 0
+        try:
+            while True:
+                try:
+                    await self.loop()
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    held = ", ".join(f"{v.get('name', k)}({k})" for k, v in self.bought.items()) or "없음"
+                    logger.exception("Bot crashed")
+                    await self.msg(f"[봇 비정상 정지] {e} — 보유: {held}")
+                    giveup = attempts >= len(_BACKOFF)
+                    if not settings.bot_restart_on_crash or giveup or not self.hours():
+                        self.crashed = True
+                        if giveup:
+                            await self.msg(f"[봇 재시작 포기] {len(_BACKOFF)}회 초과 — 수동 확인 필요")
+                        break
+                    attempts += 1
+                    await self.msg(f"[봇 재시작 {attempts}/{len(_BACKOFF)}] {_BACKOFF[attempts - 1]}초 후 재시도")
+                    await asyncio.sleep(_BACKOFF[attempts - 1])
+                    self.redo()
+                    await self.pend()
+        finally:
+            self.running = False
+            if self._unsub_tick:
+                self._unsub_tick()
+                self._unsub_tick = None
+
+    # 메인 루프
     async def loop(self) -> None:
         try:
             total_cash = await self.broker.cash()
@@ -330,7 +405,7 @@ class Bot:
 
             buy_amount = total_cash * settings.buy_percent
 
-            await self.msg("==== 보유잔고 ====")
+            lines = ["==== 보유잔고 ===="]
             if items:
                 for code, info in items.items():
                     name = info["name"]
@@ -339,19 +414,20 @@ class Bot:
                     cur = info.get("current_price", 0)
                     eval_amt = info.get("eval_amount", cur * qty)
                     pnl = info.get("profit_loss_percent", 0)
-                    await self.msg(
+                    lines.append(
                         f"  {name}({code}) {qty}주 | "
                         f"매입 {avg:,}원 → 현재 {cur:,}원 | "
                         f"평가 {eval_amt:,}원 ({pnl:+.2f}%)"
                     )
             else:
-                await self.msg("  보유 종목 없음")
-            await self.msg(f"주식 평가: {int(evaluation.get('scts_evlu_amt', '0')):,}원")
-            await self.msg(f"평가 손익: {int(evaluation.get('evlu_pfls_smtl_amt', '0')):,}원")
-            await self.msg(f"총 평가: {int(evaluation.get('tot_evlu_amt', '0')):,}원")
-            await self.msg(f"매수 가능: {total_cash:,}원 (종목당 {buy_amount:,.0f}원)")
-            await self.msg(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절=FVG동적(폴백{settings.stop_loss_pct}%), 익절+{settings.take_profit_pct}%)")
-            await self.msg("==================")
+                lines.append("  보유 종목 없음")
+            lines.append(f"주식 평가: {int(evaluation.get('scts_evlu_amt', '0')):,}원")
+            lines.append(f"평가 손익: {int(evaluation.get('evlu_pfls_smtl_amt', '0')):,}원")
+            lines.append(f"총 평가: {int(evaluation.get('tot_evlu_amt', '0')):,}원")
+            lines.append(f"매수 가능: {total_cash:,}원 (종목당 {buy_amount:,.0f}원)")
+            lines.append(f"전략: 멀티팩터 (매수>{settings.buy_score_threshold}점, 손절=FVG동적(폴백{settings.stop_loss_pct}%), 익절+{settings.take_profit_pct}%)")
+            lines.append("==================")
+            await self.msg("\n".join(lines))
 
             soldout = False
             last_eval_min = -1
@@ -370,9 +446,8 @@ class Bot:
                 # 매매 시간대 (09:05 ~ 15:15)
                 if t_start < now < t_sell:
 
-                    # 손절/익절 체크 (30초마다)
-                    if self.bought and now.second < 10:
-                        await self.risk()
+                    # 손절/익절 체크 — riskgate가 2초 스로틀 적용 (틱 wake 즉시 반응)
+                    await self.riskgate()
 
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
@@ -414,11 +489,7 @@ class Bot:
 
         except asyncio.CancelledError:
             logger.info("Bot cancelled")
-        except Exception as e:
-            await self.msg(f"[오류 발생] {e}")
-            logger.exception("Bot error")
-        finally:
-            self.running = False
+            raise
 
 # 모듈 레벨 Bot 싱글턴 인스턴스
 bot = Bot(kis, tick_q, NAMES, watchlist_symbols)

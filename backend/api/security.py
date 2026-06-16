@@ -16,3 +16,11 @@ MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 def originok(origin: str | None) -> bool:
     return not origin or origin in ALLOWED_ORIGINS
+
+
+# CSRF 게이트 (mutating 전용) — Origin 있으면 허용 목록 검증,
+# 없으면(비브라우저) X-API-Key 헤더 존재 필수 (값 검증은 guard 담당)
+def csrfok(origin: str | None, key: str | None) -> bool:
+    if origin:
+        return origin in ALLOWED_ORIGINS
+    return bool(key)

@@ -1,9 +1,8 @@
 # 매매/봇/워치리스트 API 라우터
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from api.auth import guard
+from api.limiter import limiter
 from schema import OrderRequest
 from service.trading.bot import bot
 from service.kis import kis
@@ -11,7 +10,6 @@ from service.trading.order_log import rows as order_rows
 from service.trading.trade_log import rows as trade_rows
 from service.trading.watchlist import load as load_watchlist, save as save_watchlist
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/trading")
 
 class WatchlistBody(BaseModel):

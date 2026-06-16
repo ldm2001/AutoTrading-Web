@@ -1,0 +1,32 @@
+{
+  "currentFeature": "safety-guards",
+  "phase": "design",
+  "startedAt": "2026-06-13",
+  "updatedAt": "2026-06-13",
+  "history": [
+    {
+      "feature": "backtest-harness",
+      "phase": "plan",
+      "at": "2026-05-04",
+      "note": "vibe-investing quant-research 프레임워크 적용 후 시그널 검증 인프라 도출"
+    },
+    {
+      "feature": "backtest-harness",
+      "phase": "design",
+      "at": "2026-05-04",
+      "note": "9팩터 evaluate() 재사용 + 3중 look-ahead 차단 + IS/OOS/WF 검증 스택 설계 확정 (safety-guards 착수로 일시 보류)"
+    },
+    {
+      "feature": "safety-guards",
+      "phase": "plan",
+      "at": "2026-06-13",
+      "note": "코드베이스 종합 진단(docs/improvement-plan.md) P0 7건 — 손절 fail-open 제거, 체크 지연 해소, 알림 분리, 인증/레이트리밋 배선, 봇 생명주기 정리. FR-01~08"
+    },
+    {
+      "feature": "safety-guards",
+      "phase": "design",
+      "at": "2026-06-13",
+      "note": "FR-06(Origin 부재 허용+키 필수)/FR-07(재시작 기본 on, 3회 백오프) 확정. bot.run 슈퍼바이저 + discord 큐 + api/limiter.py 설계. 신규 테스트 11케이스 정의"
+    }
+  ]
+}

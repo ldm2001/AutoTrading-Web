@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     take_profit_pct: float = 5.0      # 익절 라인 (%)
     buy_score_threshold: int = 55     # 매수 시그널 최소 스코어
     use_prediction: bool = False      # Transformer 예측 연동 (느림, 선택)
+    bot_restart_on_crash: bool = True # 장중 예외 종료 시 백오프 재시작 (3회 한도)
 
     model_config = SettingsConfigDict(
         env_file=str(_env_file),
