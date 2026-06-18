@@ -280,7 +280,9 @@ def bh(candles_15m: list[dict], cfg: BacktestConfig) -> float | None:
 
 
 def risks(candles_15m: list[dict]) -> list[str]:
-    warnings: list[str] = []
+    warnings: list[str] = [
+        "단일 포지션·% 수익 모델 — 실봇의 자금배분(buy_percent)·다종목 보유·현금 갱신·체결 지연·미체결은 미반영",
+    ]
     if len(candles_15m) < 500:
         warnings.append("15분봉 표본이 작아 결과 신뢰도가 낮습니다.")
     dates = {

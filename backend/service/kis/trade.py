@@ -11,6 +11,15 @@ from service.kis.auth import Auth
 from service.policy import Policy
 from service.ttl_cache import TTLCache
 
+# 실전/모의 TR ID — settings.mock에 따라 분기 (모의투자는 V 접두 코드)
+_TR_REAL = {"holdings": "TTTC8434R", "cash": "TTTC8908R", "buy": "TTTC0802U", "sell": "TTTC0801U"}
+_TR_MOCK = {"holdings": "VTTC8434R", "cash": "VTTC8908R", "buy": "VTTC0802U", "sell": "VTTC0801U"}
+
+
+# 현재 모드에 맞는 TR ID 반환
+def trid(key: str) -> str:
+    return (_TR_MOCK if settings.mock else _TR_REAL)[key]
+
 # 잔고와 주문을 담당
 class Trade:
     TTL_HOLDINGS = 10
@@ -40,7 +49,7 @@ class Trade:
             client = await self.auth.ready()
             resp = await client.get(
                 "/uapi/domestic-stock/v1/trading/inquire-balance",
-                headers=self.auth.header("TTTC8434R"),
+                headers=self.auth.header(trid("holdings")),
                 params={
                     "CANO": settings.cano,
                     "ACNT_PRDT_CD": settings.acnt_prdt_cd,
@@ -89,7 +98,7 @@ class Trade:
             client = await self.auth.ready()
             resp = await client.get(
                 "/uapi/domestic-stock/v1/trading/inquire-psbl-order",
-                headers=self.auth.header("TTTC8908R"),
+                headers=self.auth.header(trid("cash")),
                 params={
                     "CANO": settings.cano,
                     "ACNT_PRDT_CD": settings.acnt_prdt_cd,
@@ -164,8 +173,8 @@ class Trade:
 
     # 시장가 매수를 요청
     async def buy(self, code: str, qty: int) -> dict:
-        return await self.order(code, qty, "TTTC0802U")
+        return await self.order(code, qty, trid("buy"))
 
     # 시장가 매도를 요청
     async def sell(self, code: str, qty: int) -> dict:
-        return await self.order(code, qty, "TTTC0801U")
+        return await self.order(code, qty, trid("sell"))

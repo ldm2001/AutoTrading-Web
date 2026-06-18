@@ -45,7 +45,7 @@
 				<span class="metric-value">{$prediction.metrics.mae.toFixed(4)}</span>
 			</div>
 			<div class="metric-item">
-				<span class="metric-label">정확도</span>
+				<span class="metric-label" title="정규화(MinMax) 데이터 기준 1−MAE 지표 — 투자 예측 정확도가 아님">적합도(참고)</span>
 				<span class="metric-value">{$prediction.metrics.accuracy_pct}%</span>
 			</div>
 		</div>

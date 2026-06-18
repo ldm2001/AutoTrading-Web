@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     use_prediction: bool = False      # Transformer 예측 연동 (느림, 선택)
     bot_restart_on_crash: bool = True # 장중 예외 종료 시 백오프 재시작 (3회 한도)
 
+    # 모의투자 여부 — URL_BASE가 모의 도메인이면 자동 True (주문/잔고 TR 코드 분기 기준)
+    @property
+    def mock(self) -> bool:
+        return "openapivts" in self.url_base or ":29443" in self.url_base
+
     model_config = SettingsConfigDict(
         env_file=str(_env_file),
         env_file_encoding="utf-8",

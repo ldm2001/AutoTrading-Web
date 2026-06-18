@@ -228,6 +228,20 @@ def mitigate(zones: list[dict], price: float) -> None:
 def livez(zones: list[dict]) -> list[dict]:
     return [z for z in zones if not z["mitigated"]]
 
+# 형성 이후 캔들이 구간을 건드리면 mitigated 마킹 (히스토리 리플레이)
+# Bullish: 이후 저가가 top 이하로 진입 / Bearish: 이후 고가가 bottom 이상으로 진입
+def sweep(candles: list[dict], zones: list[dict]) -> None:
+    for z in zones:
+        if z["mitigated"]:
+            continue
+        for c in candles[z["index"] + 2:]:
+            if z["kind"] == "bullish" and c["low"] <= z["top"]:
+                z["mitigated"] = True
+                break
+            if z["kind"] == "bearish" and c["high"] >= z["bottom"]:
+                z["mitigated"] = True
+                break
+
 # 현재가 가장 근접 미완화 구간
 def near(zones: list[dict], price: float) -> dict | None:
     active = livez(zones)
@@ -238,6 +252,7 @@ def near(zones: list[dict], price: float) -> dict | None:
 # FVG 근접도 점수 (-8~+8) — Bullish 내부/근접 양수, Bearish 음수
 def fvg(candles: list[dict], price: float) -> tuple[float, str]:
     fvgs = fvgz(candles)
+    sweep(candles, fvgs)
     z    = near(fvgs, price)
     if z is None:
         return 0.0, "FVG 없음"
@@ -267,6 +282,7 @@ def fvg(candles: list[dict], price: float) -> tuple[float, str]:
 # OB 지지/저항 점수 (-7~+7) — strength(body_ratio) 가중, Bullish 양수, Bearish 음수
 def ob(candles: list[dict], price: float) -> tuple[float, str]:
     obs = obz(candles)
+    sweep(candles, obs)
     z   = near(obs, price)
     if z is None:
         return 0.0, "Order Block 없음"
@@ -314,6 +330,7 @@ def fvgin(candles_15m: list[dict], price: float) -> tuple[float, str, dict | Non
     if len(candles_15m) < 5:
         return 0.0, "분봉 데이터 부족", None
     fvgs = fvgz(candles_15m)
+    sweep(candles_15m, fvgs)
     active = livez(fvgs)
     if not active:
         return 0.0, "분봉 FVG 없음", None
@@ -341,6 +358,7 @@ def fvgin(candles_15m: list[dict], price: float) -> tuple[float, str, dict | Non
 # FVG 기반 구조적 손절가 — 가장 가까운 Bullish FVG 하단 (지지선)
 def stop(candles: list[dict], price: float) -> float | None:
     fvgs = fvgz(candles)
+    sweep(candles, fvgs)
     bull_below = [z for z in livez(fvgs)
                   if z["kind"] == "bullish" and z["bottom"] < price]
     if not bull_below:
@@ -356,6 +374,8 @@ def scan(candles: list[dict], price: float) -> dict:
 
     fvgs = fvgz(candles)
     obs  = obz(candles)
+    sweep(candles, fvgs)
+    sweep(candles, obs)
 
     return {
         "fvg_score":   round(fvg_s, 1),

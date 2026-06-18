@@ -99,7 +99,7 @@ class Bot:
         self._unsub_tick = bus.on("tick", tickcb)
 
         self._task = asyncio.create_task(self.run())
-        await self.msg("=== 자동매매 시작 ===")
+        await self.msg(f"=== 자동매매 시작 ({'모의투자' if settings.mock else '실전투자'}) ===")
 
     # 봇 중지 — tick 핸들러 해제 후 봇 루프 종료
     async def stop(self) -> None:

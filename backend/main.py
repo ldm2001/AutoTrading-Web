@@ -37,6 +37,8 @@ async def lifespan(app: FastAPI):
     logger.info("Loading all stock listings")
     listing()
     sectors()
+    mode = "모의투자(MOCK)" if settings.mock else "⚠️ 실전투자(LIVE)"
+    logger.warning("주문 모드: %s | 계좌 %s**** | %s", mode, settings.cano[:4], settings.url_base)
     logger.info("Starting KIS API")
     kis_ok = False
     try:
@@ -157,6 +159,7 @@ def create_app() -> FastAPI:
             "trading_bot": bot.running,
             "bot_crashed": bot.crashed,
             "trading_api": bool(settings.api_key),
+            "mode": "mock" if settings.mock else "real",
             "redis": kis.cache.redis is not None,
             "kafka": tick_q.kafkaon,
         }

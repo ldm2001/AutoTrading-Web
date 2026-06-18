@@ -46,7 +46,8 @@ reports/kese/technical/
 reports/kese/administrative/
 reports/kese/physical/
 
-# Candle data
+# Candle CSV + walk-forward 연구 로그 (런타임 산출물)
+backend/data/
 backend/service/data/
 backend/service/watchlist.json
 

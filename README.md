@@ -166,7 +166,7 @@
 - **타임프레임 앙상블**: Transformer 5일 예측 = 방향 필터, 15분 FVG = 진입 트리거
 - **동적 손절**: FVG 구조적 지지선 기반 (폴백: 고정 %) — 고정 비율 대비 리스크 정밀화
 - **Semaphore 제한**: 스크리닝 5개 / Transformer 2개 동시 실행 제한
-- **모의투자 지원**: `KIS_MOCK=true` 한 줄로 실거래↔모의 전환
+- **모의투자 지원**: `URL_BASE`를 모의 도메인(`openapivts...:29443`) + 모의계좌 `APP_KEY`/`APP_SECRET`/`CANO`로 설정 시 주문/잔고 TR(`VTTC*`) 자동 분기. 현재 모드는 기동 로그·`/api/health`의 `mode`로 확인
 
 ---
 
