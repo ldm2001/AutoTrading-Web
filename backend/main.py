@@ -19,6 +19,7 @@ from api.security import ALLOWED_ORIGINS, MUTATING_METHODS, csrfok
 from api.limiter import limiter
 from service.trading.bot import bot
 from service.kis import kis
+from service.trading.strategy import scorer
 from service import discord
 from service.market.price_sync import price_sync
 from service.market.sector import sectors
@@ -30,6 +31,9 @@ from service.logging import setup as setup_logging
 # 구조화 로깅 초기화
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Scorer broker 주입 (합성 루트 — 서비스 로케이터 제거)
+scorer.bind(kis)
 
 # 앱 시작/종료 시 KIS 클라이언트 및 봇 라이프사이클 관리
 @asynccontextmanager

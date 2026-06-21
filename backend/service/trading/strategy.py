@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 from service.market import indicators
 from service.market import smc
+from service.trading.ports import Quotes
 from service.ttl_cache import TTLCache
-
-if TYPE_CHECKING:
-    from service.kis import KIS
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +31,60 @@ SELL_THRESHOLD = -40
 _cache = TTLCache()
 _TTL   = 120
 
+# 팩터 계산 입력 묶음
+@dataclass
+class FactorInput:
+    ind: dict
+    candles: list[dict]
+    price: int
+    prediction: dict | None
+    candles_15m: list[dict] | None
+    fast: bool
+
+# 15분봉 FVG 팩터 — fast/데이터부족 시 특수 사유
+def _fvg15_factor(s, fi: FactorInput) -> tuple[float, str]:
+    if fi.fast:
+        return 0.0, "1단계 스크리닝에서 제외"
+    if fi.candles_15m:
+        return s.fvg15(fi.candles_15m, fi.price)
+    return 0.0, "15분봉 데이터 부족"
+
+# BOS/CHoCH 구조 팩터 — fast/데이터부족 시 특수 사유
+def _struct_factor(s, fi: FactorInput) -> tuple[float, str]:
+    if fi.fast:
+        return 0.0, "1단계 스크리닝에서 제외"
+    if fi.candles_15m:
+        return s.struct(fi.candles_15m)
+    return 0.0, "15분봉 데이터 부족"
+
+# 팩터 레지스트리 — (이름, 최대점수, 계산함수). 신규 팩터는 여기에 추가만 (OCP)
+_FACTORS = [
+    ("RSI",        W_RSI,     lambda s, fi: s.rsi(fi.ind["rsi"])),
+    ("MACD",       W_MACD,    lambda s, fi: s.macd(fi.ind["macd"])),
+    ("Bollinger",  W_BB,      lambda s, fi: s.bb(fi.ind["bollinger"])),
+    ("Volatility", W_VOL,     lambda s, fi: s.vol(fi.candles, fi.price)),
+    ("Direction",  W_PREDICT, lambda s, fi: s.pred(fi.prediction, fi.price)),
+    ("FVG",        W_FVG,     lambda s, fi: s.fvg(fi.candles, fi.price)),
+    ("OrderBlock", W_OB,      lambda s, fi: s.ob(fi.candles, fi.price)),
+    ("FVG 15m",    W_FVG_15M, _fvg15_factor),
+    ("Structure",  W_STRUCT,  _struct_factor),
+]
+
 # 9팩터 스코어링 엔진
 class Scorer:
-    # broker 의존성 주입 (지연 바인딩 지원)
-    def __init__(self, broker: KIS | None = None) -> None:
+    # broker 주입 (Quotes 포트) — 합성 루트에서 bind
+    def __init__(self, broker: Quotes | None = None) -> None:
         self._broker = broker
 
-    # broker 인스턴스 반환 (미설정 시 자동 임포트)
+    # 합성 루트에서 broker 주입
+    def bind(self, broker: Quotes) -> None:
+        self._broker = broker
+
+    # broker 반환 (미주입 시 fail-fast — 서비스 로케이터 제거)
     @property
-    def broker(self) -> KIS:
+    def broker(self) -> Quotes:
         if self._broker is None:
-            from service.kis import kis
-            self._broker = kis
+            raise RuntimeError("Scorer.broker 미주입 — 합성 루트에서 bind 필요")
         return self._broker
 
     # 캐시 키 생성 (prediction 있으면 캐싱 안 함)
@@ -211,38 +250,20 @@ class Scorer:
             current_price = price_info["price"]
             ind = indicators.summary(candles)
 
-            rsi_s,    rsi_r    = self.rsi(ind["rsi"])
-            macd_s,   macd_r   = self.macd(ind["macd"])
-            bb_s,     bb_r     = self.bb(ind["bollinger"])
-            vol_s,    vol_r    = self.vol(candles, current_price)
-            pred_s,   pred_r   = self.pred(prediction, current_price)
-            fvg_s,    fvg_r    = self.fvg(candles, current_price)
-            ob_s,     ob_r     = self.ob(candles, current_price)
-
-            if fast:
-                fvg15_s, fvg15_r = 0.0, "1단계 스크리닝에서 제외"
-                str_s, str_r = 0.0, "1단계 스크리닝에서 제외"
-            elif candles_15m:
-                fvg15_s, fvg15_r = self.fvg15(candles_15m, current_price)
-                str_s, str_r = self.struct(candles_15m)
-            else:
-                fvg15_s, fvg15_r = 0.0, "15분봉 데이터 부족"
-                str_s, str_r = 0.0, "15분봉 데이터 부족"
-
-            total = (rsi_s + macd_s + bb_s + vol_s + pred_s
-                     + fvg_s + ob_s + fvg15_s + str_s)
-
-            factors = [
-                {"name": "RSI",        "score": round(rsi_s,   1), "max": W_RSI,     "reason": rsi_r},
-                {"name": "MACD",       "score": round(macd_s,  1), "max": W_MACD,    "reason": macd_r},
-                {"name": "Bollinger",  "score": round(bb_s,    1), "max": W_BB,      "reason": bb_r},
-                {"name": "Volatility", "score": round(vol_s,   1), "max": W_VOL,     "reason": vol_r},
-                {"name": "Direction",  "score": round(pred_s,  1), "max": W_PREDICT, "reason": pred_r},
-                {"name": "FVG",        "score": round(fvg_s,   1), "max": W_FVG,     "reason": fvg_r},
-                {"name": "OrderBlock", "score": round(ob_s,    1), "max": W_OB,      "reason": ob_r},
-                {"name": "FVG 15m",    "score": round(fvg15_s, 1), "max": W_FVG_15M, "reason": fvg15_r},
-                {"name": "Structure",  "score": round(str_s,   1), "max": W_STRUCT,  "reason": str_r},
-            ]
+            fi = FactorInput(
+                ind=ind,
+                candles=candles,
+                price=current_price,
+                prediction=prediction,
+                candles_15m=candles_15m,
+                fast=fast,
+            )
+            total = 0
+            factors = []
+            for name, maxw, fn in _FACTORS:
+                score, reason = fn(self, fi)
+                total += score
+                factors.append({"name": name, "score": round(score, 1), "max": maxw, "reason": reason})
 
             # 동적 손절가는 full 평가 + 실제 15분봉 데이터가 있을 때만 계산
             stop_price = (
@@ -285,27 +306,8 @@ class Scorer:
                 "stop_price": None,
             }
 
-    # 동적 손절 — FVG 구조적 손절가 우선, 폴백으로 고정 %
-    # 시세 조회 실패는 호출부로 전파 (fail-open 금지 — bot.risk가 카운터/경보 처리)
-    async def sl(
-        self, code: str, avg_price: int,
-        structural_price: float | None = None,
-        fallback_pct: float = -3.0,
-    ) -> tuple[bool, float]:
-        current = await self.broker.raw(code)
-        pnl = (current - avg_price) / avg_price * 100
-
-        # 구조적 손절가가 있으면 그 가격 하회 시 손절
-        if structural_price and current < structural_price:
-            return True, pnl
-
-        # 폴백: 고정 % 손절
-        return pnl <= fallback_pct, pnl
-
-
-# 모듈 레벨 싱글턴 인스턴스
+# 모듈 레벨 싱글턴 인스턴스 (broker는 합성 루트 main.py에서 bind)
 scorer = Scorer()
 
 # 하위 호환
-evaluate  = scorer.evaluate
-sl = scorer.sl
+evaluate = scorer.evaluate

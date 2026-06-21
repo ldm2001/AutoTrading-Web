@@ -11,7 +11,8 @@ from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
 from service.trading.research import wfin, wfout
 from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
-from service.trading.strategy import evaluate, sl
+from service.trading.strategy import evaluate
+from service.trading.stop_loss import stop_loss
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
 from service.event_bus import bus
@@ -268,8 +269,8 @@ class Bot:
             try:
                 sp = info.get("stop_price")
                 try:
-                    should_stop, pnl = await sl(
-                        code, info["avg_price"],
+                    should_stop, pnl = await stop_loss(
+                        self.broker, code, info["avg_price"],
                         structural_price=sp,
                         fallback_pct=settings.stop_loss_pct,
                     )
