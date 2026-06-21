@@ -228,8 +228,9 @@ class EvaluateBrokerExceptionTest(unittest.IsolatedAsyncioTestCase):
 class StopLossBoundaryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_current_equals_structural_price_does_not_trigger(self):
-        # strict less-than: current == structural_price must NOT stop
-        stop, pnl = await stop_loss(_Q(950), "x", 1000, structural_price=950)
+        # strict less-than: current == structural_price must NOT trigger the structural stop
+        # fallback_pct를 충분히 낮춰 폴백이 독립적으로 트리거되지 않게 격리
+        stop, pnl = await stop_loss(_Q(950), "x", 1000, structural_price=950, fallback_pct=-10.0)
         self.assertFalse(stop)
 
     async def test_current_one_below_structural_triggers(self):
