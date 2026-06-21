@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from config import settings
-from service.discord import notify
+from service.trading.notifier import Notifier
 from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
 from service.trading.research import wfin, wfout
@@ -44,7 +44,7 @@ class Bot:
         self.pending_stops: dict[str, float] = {}
         self.logs: list[dict] = []
         self._task: asyncio.Task | None = None
-        self.on_message: Callable | None = None
+        self.notifier = Notifier()
         self.on_trade: Callable | None = None
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
@@ -131,13 +131,18 @@ class Bot:
             },
         }
 
-    # 로그 출력 + Discord 알림 + WebSocket 메시지 전송
+    # 알림 위임 — Notifier가 로그/Discord/WS 라우팅
     async def msg(self, text: str) -> None:
-        logger.info(text)
-        await notify(text)
-        if self.on_message:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await self.on_message(f"[{now}] {text}")
+        await self.notifier.msg(text)
+
+    # 공개 호환 — main이 bot.on_message로 주입 → Notifier로 라우팅
+    @property
+    def on_message(self) -> Callable | None:
+        return self.notifier.on_message
+
+    @on_message.setter
+    def on_message(self, cb: Callable | None) -> None:
+        self.notifier.on_message = cb
 
     # 거래 내역 기록 — 파일 저장 + WebSocket 이벤트 발행
     async def rec(

@@ -57,8 +57,6 @@ class _Broker:
 
 class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self._original_notify = bot_module.notify
-        bot_module.notify = noop
         self._original_append = getattr(bot_module, "order_log_append", None)
         if self._original_append:
             bot_module.order_log_append = lambda _entry: None
@@ -67,7 +65,6 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
             bot_module.trade_log_append = lambda _entry: None
 
     def tearDown(self) -> None:
-        bot_module.notify = self._original_notify
         if self._original_append:
             bot_module.order_log_append = self._original_append
         if self._original_trade_append:

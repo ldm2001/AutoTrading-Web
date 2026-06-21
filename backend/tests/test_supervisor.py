@@ -44,16 +44,13 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._restart = settings.bot_restart_on_crash
         self._backoff = bot_module._BACKOFF
-        self._notify = bot_module.notify
         self._rows = bot_module.trade_log_rows
-        bot_module.notify = noop
         bot_module.trade_log_rows = lambda: []
 
     # 교체했던 전역 복원
     def tearDown(self) -> None:
         settings.bot_restart_on_crash = self._restart
         bot_module._BACKOFF = self._backoff
-        bot_module.notify = self._notify
         bot_module.trade_log_rows = self._rows
 
     # T9 — restart off: 보유 종목 포함 경보 + crashed=True + 재시작 없음
