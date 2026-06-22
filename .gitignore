@@ -37,10 +37,11 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
-# TLS certificates
-infra/certs/
+# Infra (모니터링·인증서 생성 등 — 공개 안 함)
+infra/
 
-# KESE vulnerability reports (보안 취약점 상세 — 공개 금지)
+# KESE 하드닝/취약점 (공개 금지)
+scripts/kese-hardening/
 reports/kese/summary.md
 reports/kese/technical/
 reports/kese/administrative/
@@ -55,8 +56,9 @@ backend/service/watchlist.json
 config.yaml
 templates/
 
-# PDCA / bkit generated docs
+# PDCA / bkit generated docs + state
 docs/
+.bkit-memory.json
 
 # Playwright / E2E 테스트 (루트 레벨)
 /test-results/
