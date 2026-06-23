@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 체결 내역 패널 — 날짜별 매매 기록 테이블
 	const API = '/api/trading/history';
 
 	interface Trade {
@@ -16,6 +17,7 @@
 	let loading = $state(true);
 	let selectedDate = $state(new Date().toISOString().slice(0, 10));
 
+	// 선택 날짜 체결 내역 조회
 	async function pull() {
 		loading = true;
 		try {
@@ -28,9 +30,12 @@
 		loading = false;
 	}
 
+	// 날짜 변경 시 재조회
 	$effect(() => { selectedDate; pull(); });
 
+	// 매수/매도 한글 라벨
 	const kind = (type: Trade['type']) => type === 'buy' ? '매수' : '매도';
+	// 매수/매도 색상 클래스
 	const tone = (type: Trade['type']) => type === 'buy' ? 'buy' : 'sell';
 </script>
 

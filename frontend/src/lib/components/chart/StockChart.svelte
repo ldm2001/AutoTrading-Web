@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 일봉 차트 — 주가 라인 + 거래량 + AI 예측 오버레이
 	import { onMount } from 'svelte';
 	import {
 		createChart,
@@ -22,6 +23,7 @@
 	let volData = $state<VolData | null>(null);
 
 	let lastVolCode = '';
+	// 종목 변경 시 변동성 데이터 조회
 	$effect(() => {
 		const code = $selectedStock;
 		if (!code) { volData = null; lastVolCode = ''; return; }
@@ -33,6 +35,7 @@
 			.catch(() => {});
 	});
 
+	// 변동성 등급 → 색상
 	const hue = (g: string) => {
 		if (g === '매우높음') return '#dc2626';
 		if (g === '높음') return '#ea580c';
@@ -50,6 +53,7 @@
 	let volumeSeries: ReturnType<typeof chart.addSeries> | null = null;
 	let predLine: ReturnType<typeof chart.addSeries> | null = null;
 
+	// 선택 종목 정보 / 최신·최고·최저 가격
 	const stockInfo = $derived($stockMap.get($selectedStock));
 
 	const latestCandle = $derived.by(() => {
@@ -84,6 +88,7 @@
 		}));
 	}
 
+	// 차트 시리즈 재구성 (주가/거래량/예측)
 	function plot() {
 		if (!chart || $dailyCandles.length === 0) return;
 
@@ -153,6 +158,7 @@
 		chart.timeScale().fitContent();
 	}
 
+	// 차트 초기화 + 최초 일봉 로드
 	onMount(() => {
 		chart = createChart(container, {
 			layout: {

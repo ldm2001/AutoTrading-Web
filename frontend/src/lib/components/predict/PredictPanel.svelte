@@ -1,10 +1,12 @@
 <script lang="ts">
+	// 예측 패널 — Transformer 5일 캔들 예측
 	import { prediction, predictionLoading, predq } from '$lib/stores/predict';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
 	import './PredictPanel.css';
 
 	let lastCode = '';
 
+	// 종목 변경 시 예측 조회
 	$effect(() => {
 		const code = $selectedStock;
 		if (code && code !== lastCode) {
@@ -13,13 +15,16 @@
 		}
 	});
 
+	// 선택 종목 정보 / 최근 종가 (예측 기준선)
 	const stockInfo = $derived($stockMap.get($selectedStock));
 	const lastClose = $derived(stockInfo?.price ?? 0);
 
+	// 원화 콤마 포맷
 	function won(n: number): string {
 		return n.toLocaleString('ko-KR');
 	}
 
+	// 전일 대비 변화량/변화율
 	function diff(close: number, base: number): { value: number; pct: number } {
 		const value = close - base;
 		const pct = base > 0 ? (value / base) * 100 : 0;

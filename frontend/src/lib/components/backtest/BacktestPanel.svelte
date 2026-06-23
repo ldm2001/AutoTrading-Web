@@ -100,14 +100,17 @@
 		}
 	}
 
+	// 소수 자리 포맷
 	function num(n: number, digits = 2): string {
 		return n.toFixed(digits);
 	}
 
+	// 원화 반올림 콤마 포맷
 	function won(n: number): string {
 		return Math.round(n).toLocaleString('ko-KR');
 	}
 
+	// 퍼센트 포맷 (+부호, null 안전)
 	function pct(n: number | null | undefined): string {
 		return typeof n === 'number' ? `${n > 0 ? '+' : ''}${num(n)}%` : '-';
 	}
@@ -119,6 +122,7 @@
 		return '보유만기';
 	}
 
+	// 청산 사유 → 색상 클래스
 	function tone(r: string): string {
 		if (r === 'stop') return 'reason-stop';
 		if (r === 'tp') return 'reason-tp';

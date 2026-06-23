@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 주문 패널 — 호가창 + 시장가 주문폼 + 수익 계산
 	import { onMount } from 'svelte';
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
 	import { tradingStatus, logmsg, hdrs } from '$lib/stores/trading';
@@ -41,6 +42,7 @@
 		if (code) bookq(code);
 	});
 
+	// 호가창 조회
 	async function bookq(code: string) {
 		try {
 			const r = await fetch(`/api/stocks/${code}/orderbook`);
@@ -48,6 +50,7 @@
 		} catch { /* ignore */ }
 	}
 
+	// 예수금 조회
 	async function cashq() {
 		try {
 			const r = await fetch('/api/trading/balance');
@@ -55,6 +58,7 @@
 		} catch { /* ignore */ }
 	}
 
+	// 예수금 로드 + 3초마다 호가 갱신
 	onMount(() => {
 		cashq();
 		bookTimer = setInterval(() => {
@@ -80,6 +84,7 @@
 		return Math.round(vol / max * 100);
 	}
 
+	// 시장가 주문 전송
 	async function send() {
 		if (!$selectedStock || qty <= 0 || price <= 0) return;
 		loading = true;
@@ -109,6 +114,7 @@
 		}
 	}
 
+	// 콤마 포맷
 	function fmt(n: number) { return n.toLocaleString('ko-KR'); }
 </script>
 

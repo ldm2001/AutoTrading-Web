@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 종목 테이블 — 검색·가상 스크롤·AI 추천 목록
 	import {
 		allStocks,
 		selectedStock,
@@ -22,8 +23,10 @@
 	let showSuggestions = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout>;
 	let recModal = $state<RecommendStock | null>(null);
+	// 워치리스트 코드 집합 (AUTO 배지용)
 	const autoSet = $derived.by(() => new Set($watchCodes));
 
+	// 검색어로 필터링된 종목 목록
 	const filteredStocks = $derived.by(() => {
 		const q = searchInput.trim().toLowerCase();
 		if (!q) return $allStocks;
@@ -39,18 +42,21 @@
 	let scrollTop = $state(0);
 	let containerHeight = $state(400);
 
+	// 화면에 보이는 가상 범위 계산
 	const virtualStart = $derived(Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN));
 	const virtualEnd = $derived(Math.min(filteredStocks.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + OVERSCAN));
 	const virtualItems = $derived(filteredStocks.slice(virtualStart, virtualEnd));
 	const totalHeight = $derived(filteredStocks.length * ITEM_HEIGHT);
 	const offsetY = $derived(virtualStart * ITEM_HEIGHT);
 
+	// 스크롤 위치/높이 추적
 	function scroll(e: Event) {
 		const el = e.target as HTMLDivElement;
 		scrollTop = el.scrollTop;
 		containerHeight = el.clientHeight;
 	}
 
+	// 검색 입력 디바운스 → 자동완성
 	function input() {
 		searchError = '';
 		clearTimeout(debounceTimer);
@@ -66,12 +72,14 @@
 		}, 300);
 	}
 
+	// 자동완성 항목 선택
 	function pick(item: SearchSuggestion) {
 		showSuggestions = false;
 		searchInput = '';
 		selectedStock.set(item.code);
 	}
 
+	// 검색 제출 → 첫 결과 선택
 	function query(e: SubmitEvent) {
 		e.preventDefault();
 		const q = searchInput.trim().toLowerCase();
@@ -88,25 +96,30 @@
 		}
 	}
 
+	// 자동완성 닫기 (블러 지연)
 	function blur() {
 		setTimeout(() => (showSuggestions = false), 200);
 	}
 
+	// 종목 선택
 	function select(code: string) {
 		selectedStock.set(code);
 	}
 
+	// 추천 상세 모달 열기
 	function modal(rec: RecommendStock) {
 		selectedStock.set(rec.code);
 		recModal = rec;
 	}
 
+	// 시그널 한글 라벨
 	function sig(signal: string): string {
 		if (signal === 'buy') return '매수';
 		if (signal === 'sell') return '매도';
 		return '관망';
 	}
 
+	// 추천 종합 설명 문장 생성
 	function note(rec: RecommendStock): string {
 		const s = rec.signal;
 		const score = rec.score.toFixed(0);
@@ -129,6 +142,7 @@
 		return `종합 스코어 ${score}점으로 관망 구간입니다.${detail ? ' ' + detail + '.' : ''}`;
 	}
 
+	// 원화 콤마 포맷
 	function won(n: number): string {
 		return n.toLocaleString('ko-KR');
 	}
