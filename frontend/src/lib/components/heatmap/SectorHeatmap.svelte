@@ -50,14 +50,17 @@
 		return '#6b7280';
 	}
 
+	// 셀 호버 시 툴팁 표시
 	function tip(e: MouseEvent, cell: SectorCell) {
 		tooltip = { x: e.clientX + 12, y: e.clientY + 12, cell };
 	}
 
+	// 툴팁 숨김
 	function notip() {
 		tooltip = null;
 	}
 
+	// 재조회 (fetch 플래그 리셋)
 	function again() {
 		fetched = false;
 	}

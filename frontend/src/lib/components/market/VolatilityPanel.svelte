@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 변동성 패널 — ATR·BB폭·일중변동·RSI·등급
 	let { code, name }: { code: string; name: string } = $props();
 
 	interface VolData {
@@ -15,6 +16,7 @@
 	let data = $state<VolData | null>(null);
 	let loading = $state(true);
 
+	// 종목 변동성 데이터 조회
 	async function pull() {
 		loading = true;
 		try {
@@ -26,8 +28,10 @@
 		loading = false;
 	}
 
+	// 종목 변경 시 재조회
 	$effect(() => { code; pull(); });
 
+	// 변동성 등급 → 색상
 	const hue = (g: string) => {
 		if (g === '매우높음') return '#dc2626';
 		if (g === '높음') return '#ea580c';
@@ -35,6 +39,7 @@
 		return '#059669';
 	};
 
+	// RSI → 라벨/색상
 	const rsiz = (v: number | null) => {
 		if (v == null) return { label: '-', color: '#9ca3af' };
 		if (v >= 70) return { label: '과매수', color: '#dc2626' };

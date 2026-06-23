@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 업종별 자금 흐름 패널 — 평균 등락률 막대
 	const API = '/api/stocks/sector/flow';
 
 	interface SectorStock { name: string; change_pct: number; }
@@ -13,6 +14,7 @@
 	let sectors = $state<Sector[]>([]);
 	let loading = $state(true);
 
+	// 업종 흐름 데이터 조회
 	async function pull() {
 		loading = true;
 		try {
@@ -24,9 +26,12 @@
 		loading = false;
 	}
 
+	// 최초 진입 시 1회 조회
 	$effect(() => { pull(); });
 
+	// 등락 방향 클래스
 	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
+	// 막대 정규화용 최대 변화율
 	const maxChange = $derived(Math.max(...sectors.map(s => Math.abs(s.avg_change_pct)), 1));
 </script>
 

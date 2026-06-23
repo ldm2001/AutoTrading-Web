@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 손익 패널 — 총손익·승률·종목별 손익 막대
 	const API_PORTFOLIO = '/api/trading/portfolio';
 	const API_HISTORY   = '/api/trading/history';
 
@@ -17,6 +18,7 @@
 	let todayTrades = $state(0);
 	let loading = $state(true);
 
+	// 포트폴리오 + 체결내역 동시 조회
 	async function pull() {
 		loading = true;
 		try {
@@ -38,11 +40,15 @@
 		loading = false;
 	}
 
+	// 최초 진입 시 조회
 	$effect(() => { pull(); });
 
+	// 총 수익률 (원가 대비)
 	const totalReturn = $derived(totalEval > 0 ? ((totalPL / (totalEval - totalPL)) * 100) : 0);
+	// 등락 방향 클래스
 	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
 
+	// 수익/손실 종목 분리 + 승률
 	const winners = $derived(holdings.filter(h => h.profit_loss > 0));
 	const losers  = $derived(holdings.filter(h => h.profit_loss < 0));
 	const winRate = $derived(holdings.length > 0 ? Math.round(winners.length / holdings.length * 100) : 0);

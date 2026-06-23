@@ -1,7 +1,9 @@
 <script lang="ts">
+	// 주요 지수 카드 그리드 (로딩 시 스켈레톤)
 	import { indices } from '$lib/stores/stocks';
 	import './IndexPanel.css';
 
+	// 등락률 포맷 (+부호 포함)
 	function pct(n: number): string {
 		return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 	}

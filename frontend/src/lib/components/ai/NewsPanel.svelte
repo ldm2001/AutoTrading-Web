@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 뉴스 감성 패널 — 종목별 감성 점수·기사
 	import { newsSentiment, moodq } from '$lib/stores/ai';
 	import { selectedStock } from '$lib/stores/stocks';
 	import './NewsPanel.css';
@@ -11,12 +12,14 @@
 		}
 	});
 
+	// 점수 → 톤 클래스 (positive/negative/neutral)
 	function tone(score: number): string {
 		if (score > 20) return 'positive';
 		if (score < -20) return 'negative';
 		return 'neutral';
 	}
 
+	// 감성 코드 → 한글 라벨
 	function feel(sentiment: string): string {
 		switch (sentiment) {
 			case 'positive': return '긍정';

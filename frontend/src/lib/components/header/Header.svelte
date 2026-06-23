@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 헤더 — 시계·연결 상태·전체 자동매매 토글
 	import { priceConnected, tradeConnected } from '$lib/stores/websocket';
 	import { tradingStatus, bon, boff } from '$lib/stores/trading';
 	import { bad, ok } from '$lib/stores/toast';
@@ -9,15 +10,18 @@
 	let now = $state(new Date());
 	let switching = $state(false);
 
+	// 1초마다 현재 시각 갱신
 	$effect(() => {
 		const timer = setInterval(() => (now = new Date()), 1000);
 		return () => clearInterval(timer);
 	});
 
+	// 시:분:초 표시 포맷
 	const timeStr = $derived(
 		now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 	);
 
+	// 전체 자동매매 ON/OFF 토글
 	async function flip() {
 		const wasRunning = $tradingStatus.is_running;
 		switching = true;

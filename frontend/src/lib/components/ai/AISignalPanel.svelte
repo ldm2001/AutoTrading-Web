@@ -1,10 +1,12 @@
 <script lang="ts">
+	// AI 분석 패널 — 시그널·확신도·기술지표
 	import { aiSignal, aiLoading, aisig, moodq } from '$lib/stores/ai';
 	import { selectedStock } from '$lib/stores/stocks';
 	import './AISignalPanel.css';
 
 	let lastCode = '';
 
+	// 종목 변경 시 AI 시그널·뉴스 자동 조회
 	$effect(() => {
 		const code = $selectedStock;
 		if (code && code !== lastCode) {
@@ -14,6 +16,7 @@
 		}
 	});
 
+	// 시그널 코드 → 한글 라벨
 	function sig(signal: string): string {
 		switch (signal) {
 			case 'buy': return '매수';
@@ -22,6 +25,7 @@
 		}
 	}
 
+	// RSI 값 → 과매수/과매도/중립
 	function rsitxt(rsi: number): string {
 		if (rsi >= 70) return '과매수';
 		if (rsi <= 30) return '과매도';

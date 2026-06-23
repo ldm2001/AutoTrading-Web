@@ -1,9 +1,11 @@
 <script lang="ts">
+	// 당일 마켓 리포트 패널 (Gemini 생성)
 	import { dailyReport, rptq } from '$lib/stores/ai';
 	import './DailyReport.css';
 
 	let loading = $state(false);
 
+	// 최초 진입 시 리포트 자동 생성
 	$effect(() => {
 		if ($dailyReport === null) {
 			loading = true;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 보유 종목 패널 — 평가/손익/예수금 요약 + 테이블
 	const API = '/api/trading/portfolio';
 
 	interface Holding {
@@ -22,6 +23,7 @@
 	let data = $state<Portfolio | null>(null);
 	let loading = $state(true);
 
+	// 포트폴리오 조회
 	async function pull() {
 		loading = true;
 		try {
@@ -33,9 +35,12 @@
 		loading = false;
 	}
 
+	// 최초 진입 시 조회
 	$effect(() => { pull(); });
 
+	// 총자산 = 평가금액 + 예수금
 	const totalAsset = $derived(data ? data.total_eval + data.cash_balance : 0);
+	// 등락 방향 클래스
 	const tone = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : '';
 </script>
 
