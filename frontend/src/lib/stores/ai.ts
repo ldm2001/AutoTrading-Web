@@ -1,11 +1,16 @@
 import { writable } from 'svelte/store';
 import type { AISignal, NewsSentiment } from '$lib/types';
 
+// AI 시그널 스토어
 export const aiSignal = writable<AISignal | null>(null);
+// 뉴스 감성 스토어
 export const newsSentiment = writable<NewsSentiment | null>(null);
+// 당일 마켓 리포트 스토어
 export const dailyReport = writable<string | null>(null);
+// AI 분석 로딩 상태
 export const aiLoading = writable<boolean>(false);
 
+// AI 시그널 조회 (실패 시 지표만 폴백)
 export async function aisig(code: string) {
 	aiSignal.set(null);
 	aiLoading.set(true);
@@ -38,6 +43,7 @@ export async function aisig(code: string) {
 	}
 }
 
+// 종목 뉴스 감성 조회
 export async function moodq(code: string) {
 	try {
 		const resp = await fetch(`/api/ai/news/${code}`);
@@ -51,6 +57,7 @@ export async function moodq(code: string) {
 	}
 }
 
+// 당일 마켓 리포트 조회
 export async function rptq() {
 	try {
 		const resp = await fetch('/api/ai/report');

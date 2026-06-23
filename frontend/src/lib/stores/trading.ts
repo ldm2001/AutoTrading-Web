@@ -1,10 +1,12 @@
 import { get, writable } from 'svelte/store';
 import type { TradingStatus, SectorCell } from '$lib/types';
 
+// JSON 요청 공통 헤더
 export function hdrs(): HeadersInit {
 	return { 'Content-Type': 'application/json' };
 }
 
+// 봇 실행 상태/보유/체결 스토어
 export const tradingStatus = writable<TradingStatus>({
 	is_running: false,
 	bought_list: [],
@@ -12,20 +14,26 @@ export const tradingStatus = writable<TradingStatus>({
 	watch_count: 0
 });
 
+// 콘솔 로그 메시지 스토어
 export const consoleMessages = writable<string[]>([]);
+// 워치리스트 종목코드 스토어
 export const watchCodes = writable<string[]>([]);
+// 워치리스트 갱신 중 플래그
 export const watchBusy = writable(false);
 
+// 봇 명령 결과 타입
 export interface BotCommandResult {
 	ok: boolean;
 	status?: number;
 	error?: string;
 }
 
+// 콘솔 메시지 누적 (최근 200개 유지)
 export function logmsg(msg: string) {
 	consoleMessages.update((msgs) => [...msgs.slice(-200), msg]);
 }
 
+// 봇 상태 조회 → 스토어 갱신
 export async function statq() {
 	const resp = await fetch('/api/trading/bot/status');
 	if (!resp.ok) return false;
@@ -33,6 +41,7 @@ export async function statq() {
 	return true;
 }
 
+// 워치리스트 조회 → 스토어 갱신
 export async function listq() {
 	const resp = await fetch('/api/trading/watchlist');
 	if (!resp.ok) return;
@@ -40,6 +49,7 @@ export async function listq() {
 	watchCodes.set(body.codes ?? []);
 }
 
+// 봇 명령 HTTP 상태 → 사용자 에러 메시지 매핑
 function berr(status: number, detail: string, action: 'start' | 'stop') {
 	if (status === 403) {
 		return action === 'start'
@@ -53,6 +63,7 @@ function berr(status: number, detail: string, action: 'start' | 'stop') {
 	return detail || (action === 'start' ? '자동매매 시작에 실패했습니다.' : '자동매매 중지에 실패했습니다.');
 }
 
+// 응답 본문에서 detail 텍스트 추출
 async function errtxt(resp: Response) {
 	const body = await resp.json().catch(() => null);
 	if (body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string') {
@@ -61,6 +72,7 @@ async function errtxt(resp: Response) {
 	return resp.statusText;
 }
 
+// 봇 시작/중지 명령 전송 + 상태 동기화
 async function bcmd(action: 'start' | 'stop'): Promise<BotCommandResult> {
 	let resp: Response;
 	try {
@@ -85,14 +97,17 @@ async function bcmd(action: 'start' | 'stop'): Promise<BotCommandResult> {
 	};
 }
 
+// 봇 시작
 export async function bon() {
 	return bcmd('start');
 }
 
+// 봇 중지
 export async function boff() {
 	return bcmd('stop');
 }
 
+// 워치리스트 토글 (추가/제거 + 상태 갱신)
 export async function watchx(code: string) {
 	const codes = get(watchCodes);
 	const next = codes.includes(code)
