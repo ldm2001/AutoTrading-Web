@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 모달 다이얼로그 — 배경 클릭·ESC로 닫기
 	import type { Snippet } from 'svelte';
 	import './Modal.css';
 
@@ -11,10 +12,12 @@
 
 	let { open, title, onclose, children }: Props = $props();
 
+	// 백드롭 클릭 시 닫기
 	function bg(e: MouseEvent) {
 		if (e.target === e.currentTarget) onclose();
 	}
 
+	// ESC 키로 닫기
 	function key(e: KeyboardEvent) {
 		if (e.key === 'Escape') onclose();
 	}

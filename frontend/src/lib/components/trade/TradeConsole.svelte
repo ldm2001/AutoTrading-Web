@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 자동매매 콘솔 — 실시간 로그·긴급정지·당일 체결 내역
 	import { selectedStock, stockMap } from '$lib/stores/stocks';
 	import { tradingStatus, consoleMessages, watchCodes, boff } from '$lib/stores/trading';
 	import './TradeConsole.css';
@@ -7,17 +8,20 @@
 	let tradesOpen = $state(false);
 	let stopping = $state(false);
 
+	// 새 메시지 도착 시 콘솔 맨 아래로 자동 스크롤
 	$effect(() => {
 		if ($consoleMessages.length && consoleEl) {
 			consoleEl.scrollTop = consoleEl.scrollHeight;
 		}
 	});
 
+	// 파생 상태 — 체결 수·선택 종목·자동매매 on/live 여부
 	const tradeCount = $derived($tradingStatus.today_trades.length);
 	const stockInfo = $derived($stockMap.get($selectedStock));
 	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
 	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
 
+	// 자동매매 전체 긴급정지
 	async function halt() {
 		if (!$tradingStatus.is_running || stopping) return;
 		stopping = true;

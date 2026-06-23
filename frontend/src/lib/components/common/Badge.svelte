@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 색상 배지 (상승/하락/AI/성공/경고 변형)
 	let { text, variant = 'default' }: {
 		text: string;
 		variant?: 'default' | 'up' | 'down' | 'ai' | 'success' | 'warning';

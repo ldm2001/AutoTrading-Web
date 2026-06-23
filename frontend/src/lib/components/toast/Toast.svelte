@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 토스트 알림 표시 (성공/에러/정보, fly 트랜지션)
 	import { toasts } from '$lib/stores/toast';
 	import { fly } from 'svelte/transition';
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 가격 셀 — 등락 방향별 색상 + 변화량 표시
 	let { price, change = 0, changePct = 0, size = 'md' }: {
 		price: number;
 		change?: number;
@@ -6,7 +7,9 @@
 		size?: 'sm' | 'md' | 'lg';
 	} = $props();
 
+	// 등락 방향 (상승/하락/보합)
 	const direction = $derived(change > 0 ? 'up' : change < 0 ? 'down' : 'flat');
+	// 천단위 콤마 포맷
 	const fmt = (n: number) => n.toLocaleString('ko-KR');
 </script>
 
