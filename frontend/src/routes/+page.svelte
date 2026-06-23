@@ -1,4 +1,5 @@
 <script lang="ts">
+	// 메인 페이지 — 3컬럼 레이아웃 + 패널 모달/드로어 + WS 실시간 배선
 	import { onMount } from 'svelte';
 	import Header from '$lib/components/header/Header.svelte';
 	import StockTable from '$lib/components/table/StockTable.svelte';
@@ -26,6 +27,7 @@
 	import type { PriceUpdate, TradeMessage } from '$lib/types';
 	import './page.css';
 
+	// 패널 표시 토글 상태
 	let showAI     = $state(false);
 	let showNews   = $state(false);
 	let showReport = $state(false);
@@ -41,6 +43,7 @@
 	let showSectorFlow = $state(false);
 	let menuOpen       = $state(false);
 
+	// 메뉴 키 → 패널 열기 매핑
 	const menuMap: Record<string, () => void> = {
 		report:     () => showReport = true,
 		heatmap:    () => showHeatmap = true,
@@ -57,11 +60,13 @@
 		sectorflow: () => showSectorFlow = true,
 	};
 
+	// 메뉴 항목 클릭 → 해당 패널 열기
 	function menu(key: string) {
 		menuOpen = false;
 		menuMap[key]?.();
 	}
 
+	// 선택 종목 정보 / 자동매매 on·live 상태
 	const stockInfo = $derived($selectedStockDetail);
 	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
 	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
@@ -71,11 +76,13 @@
 		return '자동매매';
 	});
 
+	// 비율(0~1) → 퍼센트 문자열
 	function pct(value: number | undefined): string {
 		if (value == null) return '-';
 		return `${(value * 100).toFixed(0)}%`;
 	}
 
+	// 자동매매 워치리스트 등록/제외 토글
 	async function arm() {
 		const code = $selectedStock;
 		const name = stockInfo?.name ?? code;
@@ -98,6 +105,7 @@
 		}
 	});
 
+	// 초기 데이터 로드 + WS 연결/구독
 	onMount(() => {
 		Promise.all([stockinit(), idxq(), statq(), listq(), recq()]);
 
