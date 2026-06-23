@@ -45,7 +45,7 @@ class RateLimitAuthTest(unittest.TestCase):
     # T6 — 레이트리밋 초과 시 500이 아닌 429 (app.state.limiter 배선 검증)
     def test_t6(self):
         settings.api_key = "testkey"
-        app = main.create_app()
+        app = main.appfactory()
         client = TestClient(app, raise_server_exceptions=False)
         headers = {"X-API-Key": "testkey", "Origin": "http://127.0.0.1:5173"}
 
@@ -60,7 +60,7 @@ class RateLimitAuthTest(unittest.TestCase):
     # T7 — api_key 미설정 시 매매 라우터 미등록(404) + health 플래그 + guard 503
     def test_t7(self):
         settings.api_key = ""
-        app = main.create_app()
+        app = main.appfactory()
         client = TestClient(app, raise_server_exceptions=False)
 
         self.assertEqual(client.get("/api/trading/bot/status").status_code, 404)
@@ -78,7 +78,7 @@ class RateLimitAuthTest(unittest.TestCase):
         self.assertFalse(csrfok("http://evil.example", None))
 
         settings.api_key = "testkey"
-        app = main.create_app()
+        app = main.appfactory()
         client = TestClient(app, raise_server_exceptions=False)
 
         # Origin 無 + 키 헤더 無 → 미들웨어 단계에서 403

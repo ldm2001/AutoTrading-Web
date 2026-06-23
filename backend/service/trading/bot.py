@@ -12,7 +12,7 @@ from service.trading.regime import regime as regime_state
 from service.trading.research import wfin, wfout
 from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
 from service.trading.strategy import evaluate
-from service.trading.stop_loss import stop_loss
+from service.trading.stoploss import stoploss
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
 from service.event_bus import bus
@@ -45,7 +45,7 @@ class Bot:
         self.logs: list[dict] = []
         self._task: asyncio.Task | None = None
         self.notifier = Notifier()
-        self.on_trade: Callable | None = None
+        self.ontrade: Callable | None = None
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
@@ -135,14 +135,14 @@ class Bot:
     async def msg(self, text: str) -> None:
         await self.notifier.msg(text)
 
-    # 공개 호환 — main이 bot.on_message로 주입 → Notifier로 라우팅
+    # 공개 호환 — main이 bot.onmessage로 주입 → Notifier로 라우팅
     @property
-    def on_message(self) -> Callable | None:
-        return self.notifier.on_message
+    def onmessage(self) -> Callable | None:
+        return self.notifier.onmessage
 
-    @on_message.setter
-    def on_message(self, cb: Callable | None) -> None:
-        self.notifier.on_message = cb
+    @onmessage.setter
+    def onmessage(self, cb: Callable | None) -> None:
+        self.notifier.onmessage = cb
 
     # 거래 내역 기록 — 파일 저장 + WebSocket 이벤트 발행
     async def rec(
@@ -164,8 +164,8 @@ class Bot:
         self.snap()
         action = "매수" if kind == "buy" else "매도"
         await self.msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
-        if self.on_trade:
-            await self.on_trade(entry)
+        if self.ontrade:
+            await self.ontrade(entry)
 
     def acct(self, code: str, info: dict, stop_price: float | None = None) -> dict:
         pos = {
@@ -274,7 +274,7 @@ class Bot:
             try:
                 sp = info.get("stop_price")
                 try:
-                    should_stop, pnl = await stop_loss(
+                    should_stop, pnl = await stoploss(
                         self.broker, code, info["avg_price"],
                         structural_price=sp,
                         fallback_pct=settings.stop_loss_pct,

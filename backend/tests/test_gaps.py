@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import service.trading.strategy as strat
 from service.trading.strategy import Scorer
-from service.trading.stop_loss import stop_loss
+from service.trading.stoploss import stoploss
 from service.trading.ports import Quotes, Account, Orders
 from service.kis import kis
 
@@ -62,7 +62,7 @@ class _BrokenBroker:
         raise RuntimeError("KIS c15 unavailable")
 
 
-# Quotes stub for stop_loss tests
+# Quotes stub for stoploss tests
 class _Q:
     def __init__(self, price):
         self._p = price
@@ -222,7 +222,7 @@ class EvaluateBrokerExceptionTest(unittest.IsolatedAsyncioTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Gap 4 (MEDIUM): stop_loss boundary and zero structural_price
+# Gap 4 (MEDIUM): stoploss boundary and zero structural_price
 # ---------------------------------------------------------------------------
 
 class StopLossBoundaryTest(unittest.IsolatedAsyncioTestCase):
@@ -230,29 +230,29 @@ class StopLossBoundaryTest(unittest.IsolatedAsyncioTestCase):
     async def test_current_equals_structural_price_does_not_trigger(self):
         # strict less-than: current == structural_price must NOT trigger the structural stop
         # fallback_pct를 충분히 낮춰 폴백이 독립적으로 트리거되지 않게 격리
-        stop, pnl = await stop_loss(_Q(950), "x", 1000, structural_price=950, fallback_pct=-10.0)
+        stop, pnl = await stoploss(_Q(950), "x", 1000, structural_price=950, fallback_pct=-10.0)
         self.assertFalse(stop)
 
     async def test_current_one_below_structural_triggers(self):
-        stop, _ = await stop_loss(_Q(949), "x", 1000, structural_price=950)
+        stop, _ = await stoploss(_Q(949), "x", 1000, structural_price=950)
         self.assertTrue(stop)
 
     async def test_structural_price_zero_is_skipped_silently(self):
         # structural_price=0.0 is falsy; branch is skipped, fallback governs
         # pnl = (960 - 1000)/1000 * 100 = -4.0, fallback_pct=-3.0 → stop
-        stop, pnl = await stop_loss(_Q(960), "x", 1000, structural_price=0.0, fallback_pct=-3.0)
+        stop, pnl = await stoploss(_Q(960), "x", 1000, structural_price=0.0, fallback_pct=-3.0)
         self.assertTrue(stop)
         self.assertAlmostEqual(pnl, -4.0)
 
     async def test_fallback_pct_boundary_exactly_equal_triggers(self):
         # pnl == fallback_pct (e.g. exactly -3.0) must trigger (<=)
-        stop, pnl = await stop_loss(_Q(970), "x", 1000, fallback_pct=-3.0)
+        stop, pnl = await stoploss(_Q(970), "x", 1000, fallback_pct=-3.0)
         self.assertTrue(stop)
         self.assertAlmostEqual(pnl, -3.0)
 
     async def test_fallback_pct_one_tick_above_does_not_trigger(self):
         # pnl slightly above fallback_pct must not stop
-        stop, _ = await stop_loss(_Q(971), "x", 1000, fallback_pct=-3.0)
+        stop, _ = await stoploss(_Q(971), "x", 1000, fallback_pct=-3.0)
         self.assertFalse(stop)
 
 

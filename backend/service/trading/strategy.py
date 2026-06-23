@@ -42,7 +42,7 @@ class FactorInput:
     fast: bool
 
 # 15분봉 FVG 팩터 — fast/데이터부족 시 특수 사유
-def _fvg15_factor(s, fi: FactorInput) -> tuple[float, str]:
+def _fvg15factor(s, fi: FactorInput) -> tuple[float, str]:
     if fi.fast:
         return 0.0, "1단계 스크리닝에서 제외"
     if fi.candles_15m:
@@ -50,7 +50,7 @@ def _fvg15_factor(s, fi: FactorInput) -> tuple[float, str]:
     return 0.0, "15분봉 데이터 부족"
 
 # BOS/CHoCH 구조 팩터 — fast/데이터부족 시 특수 사유
-def _struct_factor(s, fi: FactorInput) -> tuple[float, str]:
+def _structfactor(s, fi: FactorInput) -> tuple[float, str]:
     if fi.fast:
         return 0.0, "1단계 스크리닝에서 제외"
     if fi.candles_15m:
@@ -66,8 +66,8 @@ _FACTORS = [
     ("Direction",  W_PREDICT, lambda s, fi: s.pred(fi.prediction, fi.price)),
     ("FVG",        W_FVG,     lambda s, fi: s.fvg(fi.candles, fi.price)),
     ("OrderBlock", W_OB,      lambda s, fi: s.ob(fi.candles, fi.price)),
-    ("FVG 15m",    W_FVG_15M, _fvg15_factor),
-    ("Structure",  W_STRUCT,  _struct_factor),
+    ("FVG 15m",    W_FVG_15M, _fvg15factor),
+    ("Structure",  W_STRUCT,  _structfactor),
 ]
 
 # 9팩터 스코어링 엔진

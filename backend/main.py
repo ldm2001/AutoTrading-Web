@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI):
     # Discord 알림 큐 기동 (주문 경로 비차단)
     await discord.start()
 
-    bot.on_message = manager.message
-    bot.on_trade = manager.trade
+    bot.onmessage = manager.message
+    bot.ontrade = manager.trade
 
     task = asyncio.create_task(price_loop()) if kis_ok else None
     yield
@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
 _ALLOWED_ORIGINS = ALLOWED_ORIGINS
 _MUTATING_METHODS = MUTATING_METHODS
 
-# Prometheus는 전역 레지스트리 — 프로세스당 1회만 계측 (create_app 재호출/테스트 대비)
+# Prometheus는 전역 레지스트리 — 프로세스당 1회만 계측 (appfactory 재호출/테스트 대비)
 _INSTRUMENTED = False
 
 # 보안 헤더 미들웨어 (CSRF 검증 + XSS/클릭재킹 방지)
@@ -111,7 +111,7 @@ class SecurityHeaders(BaseHTTPMiddleware):
         return response
 
 # FastAPI 앱 생성 — api_key 유무에 따라 매매 라우터 조건 등록 (테스트 재사용)
-def create_app() -> FastAPI:
+def appfactory() -> FastAPI:
     app = FastAPI(
         title="KI AutoTrade API",
         version="2.0.0",
@@ -176,4 +176,4 @@ def create_app() -> FastAPI:
     return app
 
 # ASGI 진입점 (uvicorn/gunicorn main:app)
-app = create_app()
+app = appfactory()

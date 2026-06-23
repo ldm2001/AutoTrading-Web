@@ -39,11 +39,11 @@ def _bot() -> Bot:
 class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
     # 모듈 전역 notify/sl 보존 후 notify는 no-op으로 교체
     def setUp(self) -> None:
-        self._stoploss = bot_module.stop_loss
+        self._stoploss = bot_module.stoploss
 
     # 교체했던 전역 복원
     def tearDown(self) -> None:
-        bot_module.stop_loss = self._stoploss
+        bot_module.stoploss = self._stoploss
 
     # T1 — 시세 조회 3회 연속 실패 시 손절 모니터링 장애 경보 정확히 1회
     async def test_t1(self):
@@ -61,7 +61,7 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
         async def boom(*_a, **_k):
             raise RuntimeError("KIS raw timeout")
 
-        bot_module.stop_loss = boom
+        bot_module.stoploss = boom
 
         for _ in range(3):
             await bot.risk()
@@ -93,7 +93,7 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
                 raise RuntimeError("transient")
             return (False, 0.0)
 
-        bot_module.stop_loss = flaky
+        bot_module.stoploss = flaky
 
         for _ in range(3):
             await bot.risk()

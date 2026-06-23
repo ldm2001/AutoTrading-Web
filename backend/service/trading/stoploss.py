@@ -2,7 +2,7 @@
 # 시세 조회 실패는 호출부로 전파 (fail-open 금지 — bot.risk가 카운터/경보 처리)
 from service.trading.ports import Quotes
 
-async def stop_loss(
+async def stoploss(
     quotes: Quotes, code: str, avg_price: int,
     structural_price: float | None = None,
     fallback_pct: float = -3.0,
