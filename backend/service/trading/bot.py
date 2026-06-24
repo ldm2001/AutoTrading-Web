@@ -10,7 +10,7 @@ from service.trading.notifier import Notifier
 from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
 from service.trading.research import wfin, wfout
-from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
+from service.trading.journal import TradeJournal
 from service.trading.strategy import evaluate
 from service.trading.stoploss import stoploss
 from service.market.tick_queue import TickQueue, tick_q
@@ -42,10 +42,9 @@ class Bot:
         self.bought: dict[str, dict] = {} # {"avg_price": int, "qty": int, "name": str}
         self.pending_buys: set[str] = set()
         self.pending_stops: dict[str, float] = {}
-        self.logs: list[dict] = []
         self._task: asyncio.Task | None = None
         self.notifier = Notifier()
-        self.ontrade: Callable | None = None
+        self.journal = TradeJournal(self.notifier, self.snap)
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
@@ -89,7 +88,7 @@ class Bot:
         self._sl_fails = {}
         self._risk_last = 0.0
         self.redo()
-        self.logs = trade_log_rows()
+        self.journal.load()
         await self.queue.start()
 
         # 이벤트 버스 구독 — tick 이벤트로 보유종목 실시간 체크
@@ -119,7 +118,7 @@ class Bot:
             "is_running": self.running,
             "crashed": self.crashed,
             "bought_list": list(self.bought.keys()),
-            "today_trades": self.logs,
+            "today_trades": self.journal.logs,
             "watch_count": len(self.scan()),
             "plan": {
                 "target_buy_count": settings.target_buy_count,
@@ -144,28 +143,20 @@ class Bot:
     def onmessage(self, cb: Callable | None) -> None:
         self.notifier.onmessage = cb
 
-    # 거래 내역 기록 — 파일 저장 + WebSocket 이벤트 발행
+    # 거래 기록 위임 — TradeJournal이 로그/파일/이벤트 담당
     async def rec(
         self, code: str, name: str, kind: str, qty: int, price: int, ok: bool
     ) -> None:
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        entry = {
-            "time": now,
-            "code": code,
-            "name": name,
-            "type": kind,
-            "qty": qty,
-            "price": price,
-            "success": ok,
-            "message": "성공" if ok else "실패",
-        }
-        self.logs.append(entry)
-        trade_log_append(entry)
-        self.snap()
-        action = "매수" if kind == "buy" else "매도"
-        await self.msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")
-        if self.ontrade:
-            await self.ontrade(entry)
+        await self.journal.rec(code, name, kind, qty, price, ok)
+
+    # 공개 호환 — main이 bot.ontrade로 주입 → TradeJournal로 라우팅
+    @property
+    def ontrade(self) -> Callable | None:
+        return self.journal.ontrade
+
+    @ontrade.setter
+    def ontrade(self, cb: Callable | None) -> None:
+        self.journal.ontrade = cb
 
     def acct(self, code: str, info: dict, stop_price: float | None = None) -> dict:
         pos = {
@@ -449,10 +440,10 @@ class Bot:
                     await self.msg("주말이므로 프로그램을 종료합니다.")
                     break
 
-                # 매매 시간대 (09:05 ~ 15:15)
+                # 09:05 ~ 15:15
                 if t_start < now < t_sell:
 
-                    # 손절/익절 체크 — riskgate가 2초 스로틀 적용 (틱 wake 즉시 반응)
+                    # 손절/익절 체크 — riskgate가 2초 스로틀 적용
                     await self.riskgate()
 
                     # 매수 스캔 (5분마다, 동적 워치리스트)

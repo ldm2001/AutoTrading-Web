@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import service.trading.bot as bot_module
+import service.trading.journal as journal_module
 from service.trading.bot import Bot
 
 
@@ -60,15 +61,15 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
         self._original_append = getattr(bot_module, "order_log_append", None)
         if self._original_append:
             bot_module.order_log_append = lambda _entry: None
-        self._original_trade_append = getattr(bot_module, "trade_log_append", None)
+        self._original_trade_append = getattr(journal_module, "trade_log_append", None)
         if self._original_trade_append:
-            bot_module.trade_log_append = lambda _entry: None
+            journal_module.trade_log_append = lambda _entry: None
 
     def tearDown(self) -> None:
         if self._original_append:
             bot_module.order_log_append = self._original_append
         if self._original_trade_append:
-            bot_module.trade_log_append = self._original_trade_append
+            journal_module.trade_log_append = self._original_trade_append
 
     async def test_account_holdings_are_not_registered_as_bot_positions(self):
         broker = _Broker({
