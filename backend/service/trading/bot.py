@@ -2,17 +2,16 @@
 import asyncio
 import datetime
 import logging
-import time
 from collections.abc import Callable
 from config import settings
 from service.trading.notifier import Notifier
 from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
-from service.trading.research import wfin, wfout
+from service.trading.research import wfin
 from service.trading.journal import TradeJournal
 from service.trading.positionbook import PositionBook
 from service.trading.strategy import evaluate
-from service.trading.stoploss import stoploss
+from service.trading.riskmonitor import RiskMonitor
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
 from service.event_bus import bus
@@ -41,12 +40,11 @@ class Bot:
         self.notifier = Notifier()
         self.positions = PositionBook(self.broker, self.names)
         self.journal = TradeJournal(self.notifier, self.positions.snap)
+        self.risks = RiskMonitor(self.broker, self.positions, self.journal, self.notifier, self.names)
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
         self._last_regime_state: str | None = None
-        self._sl_fails: dict[str, int] = {}
-        self._risk_last: float = 0.0
         self.crashed: bool = False
 
     # 보유 포지션 상태 (PositionBook 위임 — 공개/테스트 호환)
@@ -176,26 +174,9 @@ class Bot:
     async def pend(self) -> None:
         await self.positions.pend()
 
+    # 장마감 청산 위임 (RiskMonitor)
     async def sellpos(self) -> None:
-        items, _ = await self.broker.holdings()
-        for code, tracked in list(self.bought.items()):
-            info = items.get(code, tracked)
-            qty = int(info.get("qty") or tracked.get("qty") or 0)
-            if qty <= 0:
-                self.drop(code)
-                continue
-            name = info.get("name") or tracked.get("name") or self.names.get(code, code)
-            result = await self.broker.sell(code, qty)
-            cp = int(info.get("current_price", 0))
-            await self.rec(code, name, "sell", qty, cp, result["success"])
-            if result["success"]:
-                avg = int(info.get("avg_price") or tracked.get("avg_price") or 0)
-                pnl = ((cp - avg) / avg * 100) if avg > 0 else None
-                wfout(code, "eod", cp, qty, pnl)
-                self.drop(code)
-            else:
-                self.bought[code] = self.acct(code, info)
-                self.snap()
+        await self.risks.sellpos()
 
     async def gate(self) -> bool:
         try:
@@ -210,23 +191,29 @@ class Bot:
             await self.msg(f"[시장 국면] {state} — {regime['reason']}")
         return bool(regime["allow_new_buys"])
 
-    # 손절 평가 실패 누적 — 연속 3회 시 경보, 이후 20회마다 재경보
-    async def slfail(self, code: str, info: dict, err: Exception) -> None:
-        n = self._sl_fails.get(code, 0) + 1
-        self._sl_fails[code] = n
-        logger.warning("Stop-loss check failed (%s, consecutive=%s): %s", code, n, err)
-        if n % 20 == 3:
-            name = info.get("name") or self.names.get(code, code)
-            await self.msg(f"[손절 모니터링 장애] {name}({code}) 시세 조회 {n}회 연속 실패")
+    # 손절 카운터 상태 (RiskMonitor 위임 — 테스트 호환)
+    @property
+    def _sl_fails(self) -> dict[str, int]:
+        return self.risks._sl_fails
 
-    # 손절/익절 체크 게이트 — 최소 2초 간격 스로틀 (틱 이벤트 즉시 반응)
+    @_sl_fails.setter
+    def _sl_fails(self, v: dict[str, int]) -> None:
+        self.risks._sl_fails = v
+
+    @property
+    def _risk_last(self) -> float:
+        return self.risks._risk_last
+
+    @_risk_last.setter
+    def _risk_last(self, v: float) -> None:
+        self.risks._risk_last = v
+
+    # 손절/익절 감시 위임 (RiskMonitor)
+    async def slfail(self, code: str, info: dict, err: Exception) -> None:
+        await self.risks.slfail(code, info, err)
+
     async def riskgate(self) -> None:
-        if not self.bought:
-            return
-        if time.monotonic() - self._risk_last < 2.0:
-            return
-        self._risk_last = time.monotonic()
-        await self.risk()
+        await self.risks.riskgate()
 
     # 장중 여부 (평일 09:05~15:15) — KST 명시/공휴일 반영은 Phase 2에서
     def hours(self) -> bool:
@@ -237,49 +224,9 @@ class Bot:
         t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
         return t_start <= now < t_sell
 
-    # 손절/익절 모니터링 (동적 손절 지원)
+    # 손절/익절 모니터링 위임 (RiskMonitor)
     async def risk(self) -> None:
-        for code, info in list(self.bought.items()):
-            try:
-                sp = info.get("stop_price")
-                try:
-                    should_stop, pnl = await stoploss(
-                        self.broker, code, info["avg_price"],
-                        structural_price=sp,
-                        fallback_pct=settings.stop_loss_pct,
-                    )
-                except Exception as err:
-                    await self.slfail(code, info, err)
-                    continue
-                self._sl_fails.pop(code, None)
-
-                if should_stop:
-                    label = f"구조적 {sp:,.0f}" if sp else f"{settings.stop_loss_pct}%"
-                    await self.msg(
-                        f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
-                    )
-                    result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.raw(code)
-                    await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
-                    if result["success"]:
-                        wfout(code, "stop", cp, info["qty"], pnl)
-                        self.drop(code)
-                    continue
-
-                # 익절 체크
-                if pnl >= settings.take_profit_pct:
-                    await self.msg(
-                        f"[익절] {info['name']}({code}) 수익률 +{pnl:.2f}% ≥ +{settings.take_profit_pct}%"
-                    )
-                    result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.raw(code)
-                    await self.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
-                    if result["success"]:
-                        wfout(code, "profit", cp, info["qty"], pnl)
-                        self.drop(code)
-
-            except Exception as e:
-                logger.error(f"Holdings check error ({code}): {e}")
+        await self.risks.risk()
 
     # 멀티팩터 매수 판단 
     async def ent(self, sym: str, buy_amount: float) -> None:
