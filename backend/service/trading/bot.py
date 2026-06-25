@@ -1,7 +1,6 @@
 # 멀티팩터 자동매매 봇 — 매수/손절/익절/장마감 청산 루프
 import asyncio
 import datetime
-import json
 import logging
 import time
 from collections.abc import Callable
@@ -11,6 +10,7 @@ from service.kis import KIS, NAMES, kis
 from service.trading.regime import regime as regime_state
 from service.trading.research import wfin, wfout
 from service.trading.journal import TradeJournal
+from service.trading.positionbook import PositionBook
 from service.trading.strategy import evaluate
 from service.trading.stoploss import stoploss
 from service.market.tick_queue import TickQueue, tick_q
@@ -18,8 +18,6 @@ from service.trading.watchlist import symbols as watchlist_symbols
 from service.event_bus import bus
 
 logger = logging.getLogger(__name__)
-
-_REDIS_BOT_KEY = "bot:state"
 
 # 예외 재시작 백오프 (초) — 길이 = 최대 재시도 횟수
 _BACKOFF = (30, 120, 600)
@@ -39,12 +37,10 @@ class Bot:
         self.names = names
         self.scan = scan
         self.running: bool = False
-        self.bought: dict[str, dict] = {} # {"avg_price": int, "qty": int, "name": str}
-        self.pending_buys: set[str] = set()
-        self.pending_stops: dict[str, float] = {}
         self._task: asyncio.Task | None = None
         self.notifier = Notifier()
-        self.journal = TradeJournal(self.notifier, self.snap)
+        self.positions = PositionBook(self.broker, self.names)
+        self.journal = TradeJournal(self.notifier, self.positions.snap)
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
@@ -53,28 +49,37 @@ class Bot:
         self._risk_last: float = 0.0
         self.crashed: bool = False
 
-    # Redis에 봇 보유 상태 저장
-    def snap(self) -> None:
-        r = self.broker.cache.redis
-        if r is None:
-            return
-        try:
-            r.set(_REDIS_BOT_KEY, json.dumps(self.bought, default=str))
-        except Exception as e:
-            logger.warning("Bot state save failed: %s", e)
+    # 보유 포지션 상태 (PositionBook 위임 — 공개/테스트 호환)
+    @property
+    def bought(self) -> dict[str, dict]:
+        return self.positions.bought
 
-    # Redis에서 봇 보유 상태 복원
+    @bought.setter
+    def bought(self, v: dict[str, dict]) -> None:
+        self.positions.bought = v
+
+    @property
+    def pending_buys(self) -> set[str]:
+        return self.positions.pending_buys
+
+    @pending_buys.setter
+    def pending_buys(self, v: set[str]) -> None:
+        self.positions.pending_buys = v
+
+    @property
+    def pending_stops(self) -> dict[str, float]:
+        return self.positions.pending_stops
+
+    @pending_stops.setter
+    def pending_stops(self, v: dict[str, float]) -> None:
+        self.positions.pending_stops = v
+
+    # Redis 영속 위임
+    def snap(self) -> None:
+        self.positions.snap()
+
     def redo(self) -> None:
-        r = self.broker.cache.redis
-        if r is None:
-            return
-        try:
-            raw = r.get(_REDIS_BOT_KEY)
-            if raw:
-                self.bought = json.loads(raw)
-                logger.info("Bot state restored from Redis: %s positions", len(self.bought))
-        except Exception as e:
-            logger.warning("Bot state restore failed: %s", e)
+        self.positions.redo()
 
     # 봇 시작 — 오늘 거래 내역 복원 후 루프 실행
     async def start(self) -> None:
@@ -158,45 +163,18 @@ class Bot:
     def ontrade(self, cb: Callable | None) -> None:
         self.journal.ontrade = cb
 
+    # 포지션 대조/구성 위임
     def acct(self, code: str, info: dict, stop_price: float | None = None) -> dict:
-        pos = {
-            "avg_price": int(info.get("avg_price", 0)),
-            "qty": int(info.get("qty", 0)),
-            "name": info.get("name") or self.names.get(code, code),
-        }
-        if stop_price is not None:
-            pos["stop_price"] = stop_price
-        elif code in self.bought and self.bought[code].get("stop_price") is not None:
-            pos["stop_price"] = self.bought[code]["stop_price"]
-        return pos
+        return self.positions.acct(code, info, stop_price)
 
     def drop(self, code: str) -> None:
-        if code in self.bought:
-            del self.bought[code]
-            self.snap()
+        self.positions.drop(code)
 
     async def pos(self, code: str, stop_price: float | None = None) -> dict | None:
-        items, _ = await self.broker.holdings()
-        info = items.get(code)
-        if not info:
-            return None
-        self.bought[code] = self.acct(code, info, stop_price)
-        self.pending_buys.discard(code)
-        self.pending_stops.pop(code, None)
-        self.snap()
-        return self.bought[code]
+        return await self.positions.pos(code, stop_price)
 
     async def pend(self) -> None:
-        if not self.pending_buys:
-            return
-        items, _ = await self.broker.holdings()
-        for code in list(self.pending_buys):
-            info = items.get(code)
-            if info:
-                self.bought[code] = self.acct(code, info, self.pending_stops.get(code))
-                self.pending_buys.discard(code)
-                self.pending_stops.pop(code, None)
-        self.snap()
+        await self.positions.pend()
 
     async def sellpos(self) -> None:
         items, _ = await self.broker.holdings()
