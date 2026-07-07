@@ -1,27 +1,21 @@
 import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 import service.trading.bot as bot_module
 import service.trading.entryengine as entry_module
 import service.trading.journal as journal_module
 from service.trading.bot import Bot
-
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 async def noop(_text: str) -> None:
     return None
 
-
 class _Cache:
     redis = None
-
 
 class _Queue:
     async def start(self) -> None:
         return None
-
 
 class _Broker:
     def __init__(self, holdings: dict[str, dict] | None = None) -> None:
@@ -167,6 +161,39 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(broker.buys, [("111111", 10)])
         self.assertEqual(bot.pending_buys, {"111111"})
 
+    async def test_start_alerts_untracked_holdings(self):
+        broker = _Broker({
+            "999999": {
+                "code": "999999",
+                "name": "수동보유",
+                "qty": 3,
+                "avg_price": 1000,
+                "current_price": 1100,
+            }
+        })
+        bot = Bot(broker, _Queue(), {}, lambda: [])
+        captured: list[str] = []
+
+        async def cap(text: str) -> None:
+            captured.append(text)
+
+        bot.msg = cap
+
+        # 즉시 종료 loop — start가 띄우는 run 태스크를 바로 끝냄
+        async def quickloop() -> None:
+            return None
+
+        bot.loop = quickloop
+
+        original_rows = journal_module.trade_log_rows
+        journal_module.trade_log_rows = lambda: []
+        try:
+            await bot.start()
+            await bot._task
+        finally:
+            journal_module.trade_log_rows = original_rows
+
+        self.assertTrue(any("미추적" in m and "수동보유(999999)" in m for m in captured))
 
 if __name__ == "__main__":
     unittest.main()

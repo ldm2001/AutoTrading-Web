@@ -76,6 +76,16 @@ class Bot:
         self.risks.reset()
         self.redo()
         self.journal.load()
+
+        # 복원 대조 — 봇 미추적 보유 경보 (bot:state 유실·수동 보유 가시화), 실패해도 기동 계속
+        try:
+            stray = await self.positions.untracked()
+            if stray:
+                names = ", ".join(f"{i.get('name') or self.names.get(c, c)}({c})" for c, i in stray.items())
+                await self.msg(f"[복원 대조] 봇 미추적 보유 {len(stray)}종목 — {names} (손절/익절/장마감 청산 제외)")
+        except Exception as e:
+            logger.warning("Untracked holdings check failed: %s", e)
+
         await self.queue.start()
 
         # 이벤트 버스 구독 — tick 이벤트로 보유종목 실시간 체크

@@ -88,3 +88,8 @@ class PositionBook:
                 self.pending_buys.discard(code)
                 self.pending_stops.pop(code, None)
         self.snap()
+
+    # 계좌 보유 중 봇 미추적 종목 (상태 복원 유실·수동 보유 감지)
+    async def untracked(self) -> dict[str, dict]:
+        items, _ = await self.broker.holdings()
+        return {c: i for c, i in items.items() if c not in self.bought}

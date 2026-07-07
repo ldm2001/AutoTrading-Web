@@ -48,6 +48,23 @@ class PositionBookTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("005930", pb.pending_buys)
         self.assertEqual(pb.bought["005930"]["qty"], 2)
 
+    # untracked — 계좌 보유 중 봇 미추적 종목만 반환
+    async def test_untracked_holdings(self):
+        broker = _Broker({
+            "005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"},
+            "000660": {"avg_price": 2000, "qty": 1, "name": "SK하이닉스"},
+        })
+        pb = PositionBook(broker, {})
+        pb.bought = {"005930": {"qty": 2}}
+        self.assertEqual(list(await pb.untracked()), ["000660"])
+
+    # untracked — 전부 추적 중이면 빈 결과
+    async def test_untracked_empty(self):
+        broker = _Broker({"005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"}})
+        pb = PositionBook(broker, {})
+        pb.bought = {"005930": {"qty": 2}}
+        self.assertEqual(await pb.untracked(), {})
+
 
 if __name__ == "__main__":
     unittest.main()
