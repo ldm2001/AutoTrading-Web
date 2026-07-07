@@ -62,18 +62,7 @@ class Bot:
     def pending_buys(self, v: set[str]) -> None:
         self.positions.pending_buys = v
 
-    @property
-    def pending_stops(self) -> dict[str, float]:
-        return self.positions.pending_stops
-
-    @pending_stops.setter
-    def pending_stops(self, v: dict[str, float]) -> None:
-        self.positions.pending_stops = v
-
-    # Redis 영속 위임
-    def snap(self) -> None:
-        self.positions.snap()
-
+    # Redis 영속 위임 (재시작 복원 — supervisor/테스트 시임)
     def redo(self) -> None:
         self.positions.redo()
 
@@ -83,11 +72,8 @@ class Bot:
             return
         self.running = True
         self.crashed = False
-        self.bought = {}
-        self.pending_buys = set()
-        self.pending_stops = {}
-        self._sl_fails = {}
-        self._risk_last = 0.0
+        self.positions.reset()
+        self.risks.reset()
         self.redo()
         self.journal.load()
         await self.queue.start()
@@ -144,12 +130,6 @@ class Bot:
     def onmessage(self, cb: Callable | None) -> None:
         self.notifier.onmessage = cb
 
-    # 거래 기록 위임 — TradeJournal이 로그/파일/이벤트 담당
-    async def rec(
-        self, code: str, name: str, kind: str, qty: int, price: int, ok: bool
-    ) -> None:
-        await self.journal.rec(code, name, kind, qty, price, ok)
-
     # 공개 호환 — main이 bot.ontrade로 주입 → TradeJournal로 라우팅
     @property
     def ontrade(self) -> Callable | None:
@@ -159,26 +139,13 @@ class Bot:
     def ontrade(self, cb: Callable | None) -> None:
         self.journal.ontrade = cb
 
-    # 포지션 대조/구성 위임
-    def acct(self, code: str, info: dict, stop_price: float | None = None) -> dict:
-        return self.positions.acct(code, info, stop_price)
-
-    def drop(self, code: str) -> None:
-        self.positions.drop(code)
-
-    async def pos(self, code: str, stop_price: float | None = None) -> dict | None:
-        return await self.positions.pos(code, stop_price)
-
+    # 대기 매수 재대조 위임 (supervisor 재시작 경로 + 테스트 시임)
     async def pend(self) -> None:
         await self.positions.pend()
 
     # 장마감 청산 위임 (RiskMonitor)
     async def sellpos(self) -> None:
         await self.risks.sellpos()
-
-    # 시장 국면 게이트 위임 (EntryEngine)
-    async def gate(self) -> bool:
-        return await self.entries.gate()
 
     # 손절 카운터 상태 (RiskMonitor 위임 — 테스트 호환)
     @property
@@ -198,9 +165,6 @@ class Bot:
         self.risks._risk_last = v
 
     # 손절/익절 감시 위임 (RiskMonitor)
-    async def slfail(self, code: str, info: dict, err: Exception) -> None:
-        await self.risks.slfail(code, info, err)
-
     async def riskgate(self) -> None:
         await self.risks.riskgate()
 
@@ -307,7 +271,7 @@ class Bot:
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
                         last_eval_min = now.minute
-                        if not await self.gate():
+                        if not await self.entries.gate():
                             continue
                         await self.pend()
                         total_cash = await self.broker.cash()
