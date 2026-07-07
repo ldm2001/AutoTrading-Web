@@ -6,11 +6,9 @@ from collections.abc import Callable
 from config import settings
 from service.trading.notifier import Notifier
 from service.kis import KIS, NAMES, kis
-from service.trading.regime import regime as regime_state
-from service.trading.research import wfin
+from service.trading.entryengine import EntryEngine
 from service.trading.journal import TradeJournal
 from service.trading.positionbook import PositionBook
-from service.trading.strategy import evaluate
 from service.trading.riskmonitor import RiskMonitor
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
@@ -41,10 +39,10 @@ class Bot:
         self.positions = PositionBook(self.broker, self.names)
         self.journal = TradeJournal(self.notifier, self.positions.snap)
         self.risks = RiskMonitor(self.broker, self.positions, self.journal, self.notifier, self.names)
+        self.entries = EntryEngine(self.broker, self.positions, self.journal, self.notifier, self.names)
         self._tick_event = asyncio.Event()
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
-        self._last_regime_state: str | None = None
         self.crashed: bool = False
 
     # 보유 포지션 상태 (PositionBook 위임 — 공개/테스트 호환)
@@ -178,18 +176,9 @@ class Bot:
     async def sellpos(self) -> None:
         await self.risks.sellpos()
 
+    # 시장 국면 게이트 위임 (EntryEngine)
     async def gate(self) -> bool:
-        try:
-            regime = regime_state(await self.broker.indices())
-        except Exception as e:
-            logger.warning("Market regime check failed: %s", e)
-            return True
-
-        state = regime["state"]
-        if state != self._last_regime_state:
-            self._last_regime_state = state
-            await self.msg(f"[시장 국면] {state} — {regime['reason']}")
-        return bool(regime["allow_new_buys"])
+        return await self.entries.gate()
 
     # 손절 카운터 상태 (RiskMonitor 위임 — 테스트 호환)
     @property
@@ -228,65 +217,9 @@ class Bot:
     async def risk(self) -> None:
         await self.risks.risk()
 
-    # 멀티팩터 매수 판단 
+    # 매수 진입 위임 (EntryEngine)
     async def ent(self, sym: str, buy_amount: float) -> None:
-        if sym in self.bought or sym in self.pending_buys:
-            return
-        keep_pending = False
-        self.pending_buys.add(sym)
-        try:
-            # 예측 데이터
-            prediction = None
-            if settings.use_prediction:
-                try:
-                    from service.ai.predict import predict_stock
-                    prediction = await predict_stock(sym)
-                except Exception:
-                    pass
-
-            # 전략 엔진 평가
-            result = await evaluate(sym, prediction)
-            signal = result["signal"]
-            score = result["score"]
-
-            if signal != "buy" or score < settings.buy_score_threshold:
-                return
-
-            cp = result["price"]
-            qty = int(buy_amount // cp)
-            if qty <= 0:
-                return
-
-            # 팩터 요약 로그
-            factor_strs = [f"{f['name']}={f['score']:+.0f}" for f in result["factors"] if f["score"] != 0]
-            await self.msg(
-                f"[매수 시그널] {sym} 스코어={score:+.0f} ({', '.join(factor_strs)})"
-            )
-
-            # 동적 손절가 로그
-            sp = result.get("stop_price")
-            if sp:
-                await self.msg(f"  → 구조적 손절가: {sp:,.0f}원")
-
-            order = await self.broker.buy(sym, qty)
-            name = self.names.get(sym, sym)
-            if order["success"]:
-                # walk-forward: 매수 진입 시점의 평가 결과 누적
-                wfin(sym, result, qty)
-                pos = await self.pos(sym, sp)
-                if not pos:
-                    keep_pending = True
-                    if sp is not None:
-                        self.pending_stops[sym] = sp
-                    await self.msg(f"[매수 접수] {name}({sym}) 체결 잔고 반영 대기")
-            await self.rec(sym, name, "buy", qty, cp, order["success"])
-
-        except Exception as e:
-            logger.error(f"Buy check error ({sym}): {e}")
-        finally:
-            if not keep_pending:
-                self.pending_buys.discard(sym)
-                self.pending_stops.pop(sym, None)
+        await self.entries.ent(sym, buy_amount)
 
     # 슈퍼바이저 — loop 예외 시 경보 + 바운드 재시작 (장중 한정), 종료 시 구독 정리
     async def run(self) -> None:

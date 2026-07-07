@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import service.trading.bot as bot_module
+import service.trading.entryengine as entry_module
 import service.trading.journal as journal_module
 from service.trading.bot import Bot
 
@@ -127,12 +128,12 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
             }
         })
         bot = Bot(broker, _Queue(), {"111111": "실체결"}, lambda: ["111111"])
-        original_evaluate = bot_module.evaluate
-        bot_module.evaluate = buysig
+        original_evaluate = entry_module.evaluate
+        entry_module.evaluate = buysig
         try:
             await bot.ent("111111", 10_000)
         finally:
-            bot_module.evaluate = original_evaluate
+            entry_module.evaluate = original_evaluate
 
         self.assertEqual(broker.buys, [("111111", 10)])
         self.assertEqual(bot.bought["111111"]["avg_price"], 1200)
@@ -152,8 +153,8 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
         broker = _Broker()
         broker.buy_delay = 0.01
         bot = Bot(broker, _Queue(), {"111111": "대기체결"}, lambda: ["111111"])
-        original_evaluate = bot_module.evaluate
-        bot_module.evaluate = buysig
+        original_evaluate = entry_module.evaluate
+        entry_module.evaluate = buysig
         try:
             import asyncio
             await asyncio.gather(
@@ -161,7 +162,7 @@ class TradingBotLogicTest(unittest.IsolatedAsyncioTestCase):
                 bot.ent("111111", 10_000),
             )
         finally:
-            bot_module.evaluate = original_evaluate
+            entry_module.evaluate = original_evaluate
 
         self.assertEqual(broker.buys, [("111111", 10)])
         self.assertEqual(bot.pending_buys, {"111111"})
