@@ -7,7 +7,7 @@ from service.kis import kis, NAMES, ALL_STOCKS
 from service.ai.gemini import gemini
 from service.ai import news
 from service.market import indicators
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

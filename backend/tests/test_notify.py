@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import service.discord as discord
+import service.infra.discord as discord
 from service.trading.bot import Bot
 
 

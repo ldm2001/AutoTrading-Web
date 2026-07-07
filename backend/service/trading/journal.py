@@ -1,7 +1,11 @@
 # 거래 기록 — 메모리 로그 + 파일 저장 + on_trade 이벤트
 import datetime
 from collections.abc import Callable
-from service.trading.trade_log import append as trade_log_append, rows as trade_log_rows
+from service.trading.records import trade_log
+
+# records.trade_log 별칭 — 내부 호출과 테스트 몽키패치가 이 이름을 참조
+trade_log_append = trade_log.append
+trade_log_rows = trade_log.rows
 
 
 # 거래 내역을 기록·보관하고 체결 이벤트를 발행

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const source = readFileSync(new URL('../../src/lib/components/trade/OrderPanel.svelte', import.meta.url), 'utf-8');
+const source = readFileSync(new URL('../../src/lib/components/panels/trade/OrderPanel.svelte', import.meta.url), 'utf-8');
 
 test('order panel presents manual orders as market order requests', () => {
 	assert.match(source, /시장가/);

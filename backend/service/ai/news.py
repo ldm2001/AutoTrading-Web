@@ -4,7 +4,7 @@ import logging
 import time
 import httpx
 from bs4 import BeautifulSoup
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

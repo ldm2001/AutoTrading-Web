@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from service.market import indicators
 from service.market import smc
 from service.trading.ports import Quotes
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

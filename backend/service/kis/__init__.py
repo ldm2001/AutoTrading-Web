@@ -3,11 +3,11 @@ from service.kis.auth import Auth
 from service.kis.market import Market
 from service.kis.trade import Trade
 from service.kis.ws import KISWS
-from service.trading.order_log import append as order_log_append
-from service.policy import Policy
+from service.trading.records import order_log
+from service.kis.policy import Policy
 from service.market.price_sync import price_sync
 from service.market.stock_universe import ALL_STOCKS, CODES, INDICES, NAMES, listing, search
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 # 분리된 KIS 기능을 묶는 facade
 class KIS:
@@ -26,7 +26,7 @@ class KIS:
         self.policy = Policy()
         self.auth = Auth(self.policy)
         self.market = Market(self.auth, self.cache, self.policy)
-        self.trade = Trade(self.auth, self.cache, self.policy, audit=order_log_append)
+        self.trade = Trade(self.auth, self.cache, self.policy, audit=order_log.append)
         self.ws = KISWS(self.auth, price_sync)
 
     # KIS 세션 오픈

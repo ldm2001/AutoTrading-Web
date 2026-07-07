@@ -10,7 +10,7 @@ import websockets
 from service.kis.auth import Auth
 from service.market.price_sync import PriceSync
 from service.market.stock_universe import ALL_STOCKS, NAMES
-from service.metrics import ws_reconnect
+from service.infra.metrics import ws_reconnect
 
 logger = logging.getLogger(__name__)
 

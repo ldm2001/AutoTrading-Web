@@ -6,8 +6,8 @@ import logging
 from collections.abc import Callable
 from config import settings
 from service.market.candle_store import store
-from service.metrics import tick_queue_size, tick_queue_drops, candle_ingest
-from service.event_bus import bus
+from service.infra.metrics import tick_queue_size, tick_queue_drops, candle_ingest
+from service.infra.event_bus import bus
 
 logger = logging.getLogger(__name__)
 

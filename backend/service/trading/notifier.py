@@ -2,7 +2,7 @@
 import datetime
 import logging
 from collections.abc import Callable
-from service.discord import notify
+from service.infra.discord import notify
 
 logger = logging.getLogger(__name__)
 

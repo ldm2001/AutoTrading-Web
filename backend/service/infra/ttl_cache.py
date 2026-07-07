@@ -5,7 +5,7 @@ import time
 from typing import Any
 import redis
 from config import settings
-from service.metrics import cache_hit, cache_miss
+from service.infra.metrics import cache_hit, cache_miss
 
 logger = logging.getLogger(__name__)
 

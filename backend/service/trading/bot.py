@@ -14,7 +14,7 @@ from service.trading.strategy import evaluate
 from service.trading.riskmonitor import RiskMonitor
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
-from service.event_bus import bus
+from service.infra.event_bus import bus
 
 logger = logging.getLogger(__name__)
 

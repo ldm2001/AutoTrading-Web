@@ -20,13 +20,13 @@ from api.limiter import limiter
 from service.trading.bot import bot
 from service.kis import kis
 from service.trading.strategy import scorer
-from service import discord
+from service.infra import discord
 from service.market.price_sync import price_sync
 from service.market.sector import sectors
 from service.market.stock_universe import listing
 from service.market.tick_queue import tick_q
-from service.event_bus import bus
-from service.logging import setup as setup_logging
+from service.infra.event_bus import bus
+from service.infra.logging import setup as setup_logging
 
 # 구조화 로깅 초기화
 setup_logging()
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     logger.info("Loading all stock listings")
     listing()
     sectors()
-    mode = "모의투자(MOCK)" if settings.mock else "⚠️ 실전투자(LIVE)"
+    mode = "모의투자(가짜)" if settings.mock else "실전투자(실시간)"
     logger.warning("주문 모드: %s | 계좌 %s**** | %s", mode, settings.cano[:4], settings.url_base)
     logger.info("Starting KIS API")
     kis_ok = False
@@ -91,10 +91,12 @@ async def lifespan(app: FastAPI):
 _ALLOWED_ORIGINS = ALLOWED_ORIGINS
 _MUTATING_METHODS = MUTATING_METHODS
 
-# Prometheus는 전역 레지스트리 — 프로세스당 1회만 계측 (appfactory 재호출/테스트 대비)
+# Prometheus는 전역 레지스트리 — 프로세스당 1회만 계측
+# appfactory 재호출/테스트 대비
 _INSTRUMENTED = False
 
-# 보안 헤더 미들웨어 (CSRF 검증 + XSS/클릭재킹 방지)
+# 보안 헤더 미들웨어 
+# CSRF 검증 + XSS/클릭재킹 방지
 class SecurityHeaders(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # CSRF: 상태 변경 요청 시 Origin 검증, Origin 부재 시 X-API-Key 헤더 필수
@@ -110,7 +112,7 @@ class SecurityHeaders(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
 
-# FastAPI 앱 생성 — api_key 유무에 따라 매매 라우터 조건 등록 (테스트 재사용)
+# FastAPI 앱 생성 — api_key 유무에 따라 매매 라우터 조건 등록
 def appfactory() -> FastAPI:
     app = FastAPI(
         title="KI AutoTrade API",

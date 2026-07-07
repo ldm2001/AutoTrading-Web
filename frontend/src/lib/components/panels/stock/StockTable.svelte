@@ -14,7 +14,7 @@
 	} from '$lib/stores/recommend';
 	import { tradingStatus, watchCodes } from '$lib/stores/trading';
 	import type { RecommendStock } from '$lib/types';
-	import Modal from '$lib/components/modal/Modal.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import './StockTable.css';
 
 	let searchInput = $state('');

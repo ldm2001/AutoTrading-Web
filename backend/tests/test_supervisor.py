@@ -9,7 +9,7 @@ import service.trading.bot as bot_module
 import service.trading.journal as journal_module
 from service.trading.bot import Bot
 from config import settings
-from service.event_bus import bus
+from service.infra.event_bus import bus
 
 
 # msg 모킹용 no-op

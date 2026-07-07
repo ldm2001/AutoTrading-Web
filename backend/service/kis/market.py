@@ -5,9 +5,9 @@ import logging
 
 from config import settings
 from service.kis.auth import Auth
-from service.policy import Policy
+from service.kis.policy import Policy
 from service.market.stock_universe import INDICES, NAMES
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

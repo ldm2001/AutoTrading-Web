@@ -5,7 +5,7 @@ import time
 import httpx
 from config import settings
 
-from service.policy import Policy
+from service.kis.policy import Policy
 
 logger = logging.getLogger(__name__)
 

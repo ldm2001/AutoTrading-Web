@@ -8,8 +8,8 @@ from config import settings
 from collections.abc import Callable
 
 from service.kis.auth import Auth
-from service.policy import Policy
-from service.ttl_cache import TTLCache
+from service.kis.policy import Policy
+from service.infra.ttl_cache import TTLCache
 
 # 실전/모의 TR ID — settings.mock에 따라 분기 (모의투자는 V 접두 코드)
 _TR_REAL = {"holdings": "TTTC8434R", "cash": "TTTC8908R", "buy": "TTTC0802U", "sell": "TTTC0801U"}

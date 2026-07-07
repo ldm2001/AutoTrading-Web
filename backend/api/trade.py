@@ -6,8 +6,7 @@ from api.limiter import limiter
 from schema import OrderRequest
 from service.trading.bot import bot
 from service.kis import kis
-from service.trading.order_log import rows as order_rows
-from service.trading.trade_log import rows as trade_rows
+from service.trading.records import order_log, trade_log
 from service.trading.watchlist import load as load_watchlist, save as save_watchlist
 
 router = APIRouter(prefix="/api/trading")
@@ -149,9 +148,9 @@ async def heatmap(_key: str = Depends(guard)):
 # 거래 내역 조회 (날짜별, 기본=오늘)
 @router.get("/history")
 async def history(date: str | None = None, _key: str = Depends(guard)):
-    return {"date": date or "today", "trades": trade_rows(date)}
+    return {"date": date or "today", "trades": trade_log.rows(date)}
 
 # 주문 감사 로그 조회
 @router.get("/orders")
 async def orders(date: str | None = None, _key: str = Depends(guard)):
-    return {"date": date or "today", "orders": order_rows(date)}
+    return {"date": date or "today", "orders": order_log.rows(date)}

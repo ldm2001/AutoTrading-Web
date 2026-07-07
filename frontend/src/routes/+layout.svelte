@@ -1,7 +1,7 @@
 <script lang="ts">
 	// 루트 레이아웃 — 전역 스타일 + 토스트 컨테이너
 	import '../app.css';
-	import Toast from '$lib/components/toast/Toast.svelte';
+	import Toast from '$lib/components/ui/Toast.svelte';
 
 	let { children } = $props();
 </script>

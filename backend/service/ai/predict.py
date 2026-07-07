@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

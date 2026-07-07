@@ -3,7 +3,7 @@ import json
 import logging
 import google.generativeai as genai
 from config import settings
-from service.ttl_cache import TTLCache
+from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 

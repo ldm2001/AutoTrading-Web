@@ -8,7 +8,7 @@ from api.security import originok
 from config import settings
 from service.kis import kis
 from service.market.price_sync import price_sync
-from service.metrics import ws_clients
+from service.infra.metrics import ws_clients
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
