@@ -72,7 +72,7 @@
 .menu-dot.order   { background: #0f766e; }
 .menu-dot.auto       { background: rgba(37, 99, 235, 0.3); }
 .menu-dot.auto.ready { background: #2563eb; }
-.menu-dot.auto.live  { background: #34d399; animation: pulse-live 1.4s infinite; }
+.menu-dot.auto.live  { background: #1a9e5c; }
 .menu-dot.backtest   { background: #d97706; }
 .menu-dot.holdings   { background: #059669; }
 .menu-dot.history    { background: #6366f1; }
@@ -188,11 +188,6 @@
 	font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 
-@keyframes pulse-live {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.45; }
-}
-
 /* --- Info Bar Primary Actions --- */
 .info-actions {
 	display: flex;
@@ -238,62 +233,6 @@
 .action-btn.order:hover {
 	background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
 	box-shadow: 0 2px 4px rgba(15, 23, 42, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-/* 자동매매 기본 (MANUAL) — neutral filled */
-.action-btn.auto {
-	background: #f3f4f6;
-	color: #374151;
-	border-color: #d1d5db;
-}
-
-.action-btn.auto:hover {
-	background: #e5e7eb;
-	border-color: #9ca3af;
-}
-
-/* READY: 워치리스트 등록됨, 엔진 OFF */
-.action-btn.auto.ready {
-	background: #fff7ed;
-	color: #9a3412;
-	border-color: #fdba74;
-}
-
-.action-btn.auto.ready:hover {
-	background: #ffedd5;
-	border-color: #fb923c;
-}
-
-/* LIVE: 자동매매 실행 중 */
-.action-btn.auto.live {
-	background: #ecfdf5;
-	color: #065f46;
-	border-color: #6ee7b7;
-	box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
-}
-
-.action-btn.auto.live:hover {
-	background: #d1fae5;
-	border-color: #34d399;
-}
-
-.action-dot {
-	width: 0.4375rem;
-	height: 0.4375rem;
-	border-radius: 50%;
-	background: #9ca3af;
-	flex-shrink: 0;
-}
-
-.action-btn.auto.ready .action-dot {
-	background: #f97316;
-	box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
-}
-
-.action-btn.auto.live .action-dot {
-	background: #10b981;
-	box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-	animation: pulse-live 1.4s ease-in-out infinite;
 }
 
 /* --- 3-Column Grid --- */

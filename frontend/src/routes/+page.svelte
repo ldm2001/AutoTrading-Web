@@ -70,12 +70,6 @@
 	const stockInfo = $derived($selectedStockDetail);
 	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
 	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
-	const autoLabel = $derived.by(() => {
-		if (autoLive) return '자동매매 중';
-		if (autoOn) return '자동대기';
-		return '자동매매';
-	});
-
 	// 비율(0~1) → 퍼센트 문자열
 	function pct(value: number | undefined): string {
 		if (value == null) return '-';
@@ -173,6 +167,9 @@
 				</button>
 
 				<span class="menu-label">매매</span>
+				<button class="menu-item" onclick={() => menu('auto')}>
+					<span class="menu-dot auto" class:ready={autoOn} class:live={autoLive}></span>자동매매
+				</button>
 				<button class="menu-item" onclick={() => menu('backtest')}>
 					<span class="menu-dot backtest"></span>백테스트
 				</button>
@@ -230,16 +227,6 @@
 						aria-label="주식주문 패널 열기 — {stockInfo?.name ?? $selectedStock}"
 					>
 						주식주문
-					</button>
-					<button
-						class="action-btn auto"
-						class:ready={autoOn}
-						class:live={autoLive}
-						type="button"
-						onclick={() => showAuto = true}
-						aria-label="자동매매 설정 열기 — {stockInfo?.name ?? $selectedStock}, 현재 상태 {autoLive ? 'LIVE' : autoOn ? 'READY' : 'MANUAL'}"
-					>
-						<span class="action-dot" aria-hidden="true"></span>{autoLabel}
 					</button>
 				</div>
 			</div>

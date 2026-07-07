@@ -1,7 +1,6 @@
 <script lang="ts">
 	// 자동매매 콘솔 — 실시간 로그·긴급정지·당일 체결 내역
-	import { selectedStock, stockMap } from '$lib/stores/stocks';
-	import { tradingStatus, consoleMessages, watchCodes, boff } from '$lib/stores/trading';
+	import { tradingStatus, consoleMessages, boff } from '$lib/stores/trading';
 	import './TradeConsole.css';
 
 	let consoleEl: HTMLDivElement;
@@ -15,11 +14,18 @@
 		}
 	});
 
-	// 파생 상태 — 체결 수·선택 종목·자동매매 on/live 여부
+	// 파생 상태 — 당일 체결 수
 	const tradeCount = $derived($tradingStatus.today_trades.length);
-	const stockInfo = $derived($stockMap.get($selectedStock));
-	const autoOn = $derived.by(() => !!$selectedStock && $watchCodes.includes($selectedStock));
-	const autoLive = $derived.by(() => autoOn && $tradingStatus.is_running);
+
+	// 로그 파싱 — [YYYY-MM-DD HH:MM:SS] 접두어를 시각/본문 컬럼으로 분리 (개행 보존)
+	const LOG_RE = /^\[\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})\]\s?([\s\S]*)$/;
+	const logLines = $derived(
+		$consoleMessages.map((raw) => {
+			const hit = LOG_RE.exec(raw);
+			const body = hit ? hit[2] : raw;
+			return { time: hit ? hit[1] : '', body, section: body.startsWith('====') };
+		})
+	);
 
 	// 자동매매 전체 긴급정지
 	async function halt() {
@@ -34,9 +40,6 @@
 	<div class="console-header">
 		<span class="console-title">Console</span>
 		<div class="console-head-right">
-			<span class="console-status" class:running={$tradingStatus.is_running}>
-				{$tradingStatus.is_running ? 'LIVE' : 'IDLE'}
-			</span>
 			<button
 				class="console-stop"
 				type="button"
@@ -51,9 +54,6 @@
 	<div class="console-bar">
 		<div class="console-tags">
 			<span class="console-tag strategy">멀티팩터</span>
-			<span class="console-tag" class:auto={autoOn} class:live={autoLive}>
-				{stockInfo?.name ?? '선택 종목'} · {autoLive ? '자동매매 중' : autoOn ? '자동대기' : '수동'}
-			</span>
 			{#if $tradingStatus.plan}
 				<span class="console-tag">종목당 {($tradingStatus.plan.buy_percent * 100).toFixed(0)}%</span>
 				<span class="console-tag">손절 {$tradingStatus.plan.stop_loss_pct}%</span>
@@ -64,11 +64,14 @@
 	</div>
 
 	<div bind:this={consoleEl} class="console-log">
-		{#if $consoleMessages.length === 0}
+		{#if logLines.length === 0}
 			<p class="console-placeholder">상단에서 스위치를 활성화하세요.</p>
 		{/if}
-		{#each $consoleMessages as msg}
-			<p class="console-msg">{msg}</p>
+		{#each logLines as line}
+			<div class="console-msg" class:section={line.section}>
+				{#if line.time}<span class="log-time">{line.time}</span>{/if}
+				<span class="log-body">{line.body}</span>
+			</div>
 		{/each}
 	</div>
 

@@ -31,24 +31,6 @@
 	letter-spacing: 0.05em;
 }
 
-.console-status {
-	font-size: 0.625rem;
-	font-weight: 700;
-	color: #9ca3af;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-.console-status.running {
-	color: #22c55e;
-	animation: pulse-live 2s infinite;
-}
-
-@keyframes pulse-live {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.5; }
-}
-
 .console-log {
 	flex: 1;
 	min-height: 2rem;
@@ -74,7 +56,29 @@
 }
 
 .console-msg {
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.0625rem 0;
 	color: #6b7280;
+}
+
+.log-time {
+	flex-shrink: 0;
+	color: #b0b6be;
+	user-select: none;
+}
+
+.log-body {
+	flex: 1;
+	min-width: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.console-msg.section .log-body {
+	color: #4b5563;
+	border-left: 2px solid #e5e7eb;
+	padding-left: 0.4375rem;
 }
 
 .console-bar {
@@ -109,17 +113,6 @@
 .console-tag.strategy {
 	color: #7c3aed;
 	border-color: rgba(124, 58, 237, 0.16);
-}
-
-.console-tag.auto {
-	color: #1d4ed8;
-	border-color: rgba(37, 99, 235, 0.18);
-}
-
-.console-tag.live {
-	color: #065f46;
-	border-color: rgba(16, 185, 129, 0.2);
-	background: rgba(16, 185, 129, 0.08);
 }
 
 .console-stop {
