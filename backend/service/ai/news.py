@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 _cache = TTLCache()
 _TTL = 300 # 5분
+_TTL_EMPTY = 30 # 구조 변경/차단 의심 시 짧은 재시도 간격
 _last_request: float = 0
 _REQUEST_INTERVAL = 1.0 # 요청 간격
 
@@ -83,6 +84,12 @@ async def headlines(code: str, count: int = 10) -> list[dict]:
 
         if len(articles) >= count:
             break
+
+    # 기사 0건 + 목록 테이블 부재는 페이지 구조 변경/차단 의심 — 경고 후 짧게 캐시
+    if not articles and soup.select_one("table.type5") is None:
+        logger.warning(f"News parse empty for {code}: page structure changed or blocked (html {len(resp.text)}b)")
+        _cache.set(key, articles, _TTL_EMPTY)
+        return articles
 
     _cache.set(key, articles, _TTL)
     return articles

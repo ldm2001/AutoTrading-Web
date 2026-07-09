@@ -129,7 +129,8 @@ class Predictor:
         loss  = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs    = gain / (loss + 1e-10)
         df["RSI"] = 100 - (100 / (1 + rs))
-        df = df.fillna(0)
+        # 거래량 0 구간의 pct_change inf 제거 (거래정지 후 재개 종목)
+        df = df.replace([np.inf, -np.inf], 0).fillna(0)
         return df
 
     # Transformer 학습 및 5일 예측

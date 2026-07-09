@@ -61,5 +61,22 @@ class SingleFlightTest(unittest.TestCase):
             asyncio.run(p.predict("005930"))
         self.assertEqual(p._inflight, {})
 
+class FeatTest(unittest.TestCase):
+    # 거래량 0 → 재개 구간의 pct_change inf가 피처에 남지 않음
+    def test_inf_scrubbed(self):
+        import numpy as np
+        import pandas as pd
+
+        p = build()
+        df = pd.DataFrame({
+            "Open":   [100.0] * 30,
+            "High":   [101.0] * 30,
+            "Low":    [99.0] * 30,
+            "Close":  [100.0] * 30,
+            "Volume": [0.0] * 15 + [1000.0] * 15,
+        })
+        out = p.feat(df)
+        self.assertTrue(np.isfinite(out.to_numpy()).all())
+
 if __name__ == "__main__":
     unittest.main()

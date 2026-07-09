@@ -1,7 +1,6 @@
 # AI 분석 파이프라인 오케스트레이터
 import asyncio
 import logging
-
 from datetime import date
 from service.kis import kis, NAMES, ALL_STOCKS
 from service.ai.gemini import gemini
@@ -147,22 +146,6 @@ class AIPipeline:
         except Exception as e:
             logger.error(f"Daily report generation failed: {e}")
             return None
-
-    # 봇용 시그널 체크 ('buy'|'hold'|'sell')
-    async def signal(self, code: str) -> str:
-        if not gemini.enabled:
-            return "hold"
-        try:
-            result = await self.analyze(code)
-            if result:
-                return result.get("signal", "hold")
-        except Exception:
-            pass
-        return "hold"
-
-    # 하위 호환 별칭
-    daily_report = report
-    check_signal = signal
 
 
 pipeline = AIPipeline()
