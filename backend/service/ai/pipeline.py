@@ -55,7 +55,8 @@ class AIPipeline:
 
     # 종목 종합 분석 (기술 지표 + 뉴스 + AI 시그널)
     async def analyze(self, code: str) -> dict | None:
-        cached = _analyze_cache.get(code)
+        key = f"analyze:{code}"
+        cached = _analyze_cache.get(key)
         if cached is not None:
             return cached
         try:
@@ -82,7 +83,7 @@ class AIPipeline:
                     "reasons":    ["Gemini API 미설정" if not gemini.enabled else "AI 분석 실패"],
                 }),
             }
-            _analyze_cache.set(code, result, _ANALYZE_TTL)
+            _analyze_cache.set(key, result, _ANALYZE_TTL)
             return result
         except Exception as e:
             logger.error(f"AI analyze failed for {code}: {e}")
@@ -90,7 +91,8 @@ class AIPipeline:
 
     # 뉴스 감성 분석
     async def sentiment(self, code: str) -> dict | None:
-        cached = _sentiment_cache.get(code)
+        key = f"senti:{code}"
+        cached = _sentiment_cache.get(key)
         if cached is not None:
             return cached
         try:
@@ -100,7 +102,7 @@ class AIPipeline:
                 gemini_result = await gemini.sentiment(stock_news, stock_name)
                 if gemini_result:
                     result = {"code": code, "name": stock_name, **gemini_result}
-                    _sentiment_cache.set(code, result, _SENTIMENT_TTL)
+                    _sentiment_cache.set(key, result, _SENTIMENT_TTL)
                     return result
             # Gemini 미설정 → 뉴스 제목만 반환
             result = {
@@ -113,7 +115,7 @@ class AIPipeline:
                     for n in stock_news
                 ],
             }
-            _sentiment_cache.set(code, result, _SENTIMENT_TTL)
+            _sentiment_cache.set(key, result, _SENTIMENT_TTL)
             return result
         except Exception as e:
             logger.error(f"Sentiment analysis failed for {code}: {e}")

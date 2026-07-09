@@ -253,18 +253,19 @@ class Predictor:
 
     # 캐시된 예측 조회 (없으면 None)
     def cached(self, symbol: str) -> dict | None:
-        return self._cache.get(symbol.zfill(6))
+        return self._cache.get(f"pred:{symbol.zfill(6)}")
 
     # 비동기 예측 진입점 (캐시 포함)
     async def predict(self, symbol: str) -> dict:
         symbol = symbol.zfill(6)
-        cached = self._cache.get(symbol)
+        key = f"pred:{symbol}"
+        cached = self._cache.get(key)
         if cached is not None:
             logger.info(f"캐시 사용: {symbol}")
             return cached
         loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(self._executor, self.fit, symbol)
-        self._cache.set(symbol, result, self._CACHE_TTL)
+        self._cache.set(key, result, self._CACHE_TTL)
         return result
 
 # 모듈 레벨 인스턴스

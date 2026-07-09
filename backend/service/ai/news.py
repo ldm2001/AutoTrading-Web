@@ -17,7 +17,7 @@ _REQUEST_INTERVAL = 1.0 # 요청 간격
 async def headlines(code: str, count: int = 10) -> list[dict]:
     global _last_request
 
-    key = f"{code}:{count}"
+    key = f"news:{code}:{count}"
     cached = _cache.get(key)
     if cached is not None:
         return cached
