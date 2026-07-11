@@ -6,6 +6,7 @@ from service.kis import kis, NAMES, ALL_STOCKS
 from service.ai.gemini import gemini
 from service.ai import news
 from service.market import indicators
+from service.market.holidays import mkt
 from service.infra.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -17,25 +18,6 @@ _ANALYZE_TTL = 180
 # sentiment 결과 캐시 (5분 TTL)
 _sentiment_cache = TTLCache()
 _SENTIMENT_TTL = 300
-
-# 한국 공휴일 2026 (음력 변동분 수동 갱신)
-_KR_HOLIDAYS_2026 = {
-    (1, 1), (1, 28), (1, 29), (1, 30),
-    (3, 1), (5, 5), (5, 24),
-    (6, 6), (8, 15),
-    (9, 24), (9, 25), (9, 26),
-    (10, 3), (10, 9), (12, 25),
-}
-
-# 장 개장 여부 확인 (주말/공휴일 제외)
-def mkt(d: date | None = None) -> bool:
-    d = d or date.today()
-    if d.weekday() >= 5:
-        return False
-    if (d.month, d.day) in _KR_HOLIDAYS_2026:
-        return False
-    return True
-
 
 # 종목 코드 → 이름 조회
 def name(code: str) -> str:

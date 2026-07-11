@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, Dataset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
 from service.infra.ttl_cache import TTLCache
+from service.market.holidays import mkt
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ class Predictor:
             import FinanceDataReader as fdr
             data = fdr.DataReader(symbol, start_date, end_date)
             if data is not None and not data.empty:
+                data = self.settled(data, symbol)
                 logger.info(f"FDR 데이터 수집 성공: {symbol} ({len(data)}일)")
                 return data
         except Exception as e:
@@ -110,11 +112,26 @@ class Predictor:
                 stock  = yf.Ticker(ticker)
                 data   = stock.history(start=start_date, end=end_date, timeout=10)
                 if not data.empty:
+                    data = self.settled(data, ticker)
                     logger.info(f"YF 데이터 수집 성공: {ticker} ({len(data)}일)")
                     return data
         except Exception as e:
             logger.warning(f"YFinance 실패 {symbol}: {e}")
         raise ValueError(f"데이터 수집 실패: {symbol}")
+
+    # 장 마감 전이면 형성 중인 당일봉을 제거 (네이버/야후 일봉은 장중 미완성 봉 포함)
+    def settled(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        if df.empty:
+            return df
+        now = datetime.now()
+        if not mkt(now.date()):
+            return df
+        if now >= now.replace(hour=15, minute=30, second=0, microsecond=0):
+            return df
+        if df.index[-1].date() == now.date():
+            logger.info(f"당일 미완성봉 제외: {symbol}")
+            return df.iloc[:-1]
+        return df
 
     # 피처 엔지니어링 (MA5, MA20, RSI, 변화율)
     def feat(self, df: pd.DataFrame) -> pd.DataFrame:

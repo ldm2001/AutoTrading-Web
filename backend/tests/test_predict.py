@@ -1,8 +1,10 @@
 import asyncio
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
+import service.ai.predict as predict_module
 from service.ai.predict import Predictor
 from service.infra.ttl_cache import TTLCache
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -77,6 +79,84 @@ class FeatTest(unittest.TestCase):
         })
         out = p.feat(df)
         self.assertTrue(np.isfinite(out.to_numpy()).all())
+
+class SettledTest(unittest.TestCase):
+    # 고정 시각/개장 여부로 settled 실행
+    def run_settled(self, dates, now, open_day):
+        import pandas as pd
+
+        class _Clock:
+            @classmethod
+            def now(cls):
+                return now
+
+        df = pd.DataFrame(
+            {"Close": [float(i) for i in range(len(dates))]},
+            index=pd.to_datetime(dates),
+        )
+        p = build()
+        with mock.patch.object(predict_module, "datetime", _Clock), \
+             mock.patch.object(predict_module, "mkt", lambda d=None: open_day):
+            return p.settled(df, "005930")
+
+    # 장중에는 형성 중인 당일봉 제거
+    def test_intraday_drop(self):
+        out = self.run_settled(
+            ["2026-07-10", "2026-07-13", "2026-07-14"],
+            datetime(2026, 7, 14, 10, 0), open_day=True,
+        )
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out.index[-1].date(), datetime(2026, 7, 13).date())
+
+    # 장 마감 후에는 당일 완결봉 유지
+    def test_after_close_keep(self):
+        out = self.run_settled(
+            ["2026-07-13", "2026-07-14"],
+            datetime(2026, 7, 14, 15, 31), open_day=True,
+        )
+        self.assertEqual(len(out), 2)
+
+    # 휴장일 조회는 손대지 않음
+    def test_holiday_keep(self):
+        out = self.run_settled(
+            ["2026-07-13", "2026-07-14"],
+            datetime(2026, 7, 14, 10, 0), open_day=False,
+        )
+        self.assertEqual(len(out), 2)
+
+    # 장중이라도 당일봉이 아직 없으면 그대로
+    def test_no_today_bar(self):
+        out = self.run_settled(
+            ["2026-07-10", "2026-07-13"],
+            datetime(2026, 7, 14, 10, 0), open_day=True,
+        )
+        self.assertEqual(len(out), 2)
+
+    # raw()의 FDR 경로에 가드가 적용됨
+    def test_raw_strips_forming_bar(self):
+        import types
+        import pandas as pd
+
+        idx = pd.to_datetime(["2026-07-13", "2026-07-14"])
+        frame = pd.DataFrame(
+            {"Open": [1.0, 1.0], "High": [1.0, 1.0], "Low": [1.0, 1.0],
+             "Close": [1.0, 1.0], "Volume": [10, 10]},
+            index=idx,
+        )
+        fake_fdr = types.SimpleNamespace(DataReader=lambda *a, **k: frame)
+
+        class _Clock:
+            @classmethod
+            def now(cls):
+                return datetime(2026, 7, 14, 10, 0)
+
+        p = build()
+        with mock.patch.dict(sys.modules, {"FinanceDataReader": fake_fdr}), \
+             mock.patch.object(predict_module, "datetime", _Clock), \
+             mock.patch.object(predict_module, "mkt", lambda d=None: True):
+            out = p.raw("005930")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out.index[-1].date(), datetime(2026, 7, 13).date())
 
 if __name__ == "__main__":
     unittest.main()

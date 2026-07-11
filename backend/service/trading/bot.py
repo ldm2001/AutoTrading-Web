@@ -10,6 +10,7 @@ from service.trading.entryengine import EntryEngine
 from service.trading.journal import TradeJournal
 from service.trading.positionbook import PositionBook
 from service.trading.riskmonitor import RiskMonitor
+from service.market.holidays import mkt
 from service.market.tick_queue import TickQueue, tick_q
 from service.trading.watchlist import symbols as watchlist_symbols
 from service.infra.event_bus import bus
@@ -178,10 +179,10 @@ class Bot:
     async def riskgate(self) -> None:
         await self.risks.riskgate()
 
-    # 장중 여부 (평일 09:05~15:15) — KST 명시/공휴일 반영은 Phase 2에서
+    # 장중 여부 (개장일 09:05~15:15) — KST 명시는 Phase 2에서
     def hours(self) -> bool:
         now = datetime.datetime.now()
-        if now.weekday() >= 5:
+        if not mkt(now.date()):
             return False
         t_start = now.replace(hour=9, minute=5, second=0, microsecond=0)
         t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
@@ -268,8 +269,8 @@ class Bot:
                 t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
                 t_exit = now.replace(hour=15, minute=20, second=0, microsecond=0)
 
-                if now.weekday() >= 5:
-                    await self.msg("주말이므로 프로그램을 종료합니다.")
+                if not mkt(now.date()):
+                    await self.msg("주말/휴장일이므로 프로그램을 종료합니다.")
                     break
 
                 # 09:05 ~ 15:15

@@ -7,6 +7,7 @@ from api.auth import keyok
 from api.security import originok
 from config import settings
 from service.kis import kis
+from service.market import holidays
 from service.market.price_sync import price_sync
 from service.infra.metrics import ws_clients
 
@@ -56,10 +57,10 @@ class WS:
 
 manager = WS()
 
-# 현재 시간이 평일 장 시간(09:00~15:35) 인지 확인
+# 현재 시간이 개장일 장 시간(09:00~15:35) 인지 확인
 def mkt(now: datetime.datetime) -> bool:
     mins = now.hour * 60 + now.minute
-    return now.weekday() < 5 and 9 * 60 <= mins < 15 * 60 + 35
+    return holidays.mkt(now.date()) and 9 * 60 <= mins < 15 * 60 + 35
 
 
 # 요청 종목 수만큼 응답이 왔는지 확인
