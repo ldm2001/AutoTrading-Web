@@ -41,7 +41,7 @@ class OrderRequest(BaseModel):
     # 종목코드 6자리 숫자 형식 검증
     @field_validator("code")
     @classmethod
-    def validate_code(cls, v: str) -> str:
+    def code6(cls, v: str) -> str:
         v = v.strip().zfill(6)
         if not _CODE_RE.match(v):
             raise ValueError("종목코드는 6자리 숫자여야 합니다")
