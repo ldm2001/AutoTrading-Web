@@ -22,19 +22,24 @@ class _Q:
 class StopLossTest(unittest.IsolatedAsyncioTestCase):
     # 구조적 손절가 하회 시 손절
     async def test_structural_hit(self):
-        stop, pnl = await stoploss(_Q(900), "x", 1000, structural_price=950)
+        stop, pnl, _ = await stoploss(_Q(900), "x", 1000, structural_price=950)
         self.assertTrue(stop)
 
     # 구조적 손절가 위 + 폴백 미달 → 보유
     async def test_structural_ok(self):
-        stop, _ = await stoploss(_Q(1000), "x", 1000, structural_price=950, fallback_pct=-3.0)
+        stop, _, _ = await stoploss(_Q(1000), "x", 1000, structural_price=950, fallback_pct=-3.0)
         self.assertFalse(stop)
 
     # 구조적 없음 + 고정 % 하회 → 손절
     async def test_fallback_pct(self):
-        stop, pnl = await stoploss(_Q(960), "x", 1000, fallback_pct=-3.0)
+        stop, pnl, _ = await stoploss(_Q(960), "x", 1000, fallback_pct=-3.0)
         self.assertTrue(stop)
         self.assertAlmostEqual(pnl, -4.0)
+
+    # 판정에 쓴 현재가를 함께 반환 — 호출부가 매도 후 시세를 재조회하지 않도록
+    async def test_returns_decision_price(self):
+        _, _, current = await stoploss(_Q(960), "x", 1000, fallback_pct=-3.0)
+        self.assertEqual(current, 960)
 
     # 시세 조회 예외는 그대로 전파 (fail-safe)
     async def test_exception_propagates(self):

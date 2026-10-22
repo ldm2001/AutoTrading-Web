@@ -14,6 +14,12 @@ def intra(dt: datetime.datetime) -> bool:
 def same(a: datetime.datetime, b: datetime.datetime) -> bool:
     return a.date() == b.date()
 
+# 분봉 간격 — 같은 날 인접 봉 사이 최소 시간차 (15분봉·60분봉 공용), 인접 봉이 없으면 None
+def stride(candles: list[dict]) -> datetime.timedelta | None:
+    gaps = [b["time"] - a["time"] for a, b in zip(candles, candles[1:])
+            if same(a["time"], b["time"]) and b["time"] > a["time"]]
+    return min(gaps) if gaps else None
+
 # 장외 캔들 제거 (09:00 이전/15:30 이후)
 def daybar(candles: list[dict]) -> list[dict]:
     return [c for c in candles if intra(c["time"])]
@@ -29,6 +35,7 @@ def body(c: dict) -> float:
 def fvgz(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
     n = len(candles)
     result: list[dict] = []
+    unit = stride(candles) if n and "time" in candles[0] else None
 
     for i in range(1, n - 1):
         prev, mid, nxt = candles[i - 1], candles[i], candles[i + 1]
@@ -37,6 +44,10 @@ def fvgz(candles: list[dict], join_consecutive: bool = True) -> list[dict]:
         if "time" in mid:
             if not (same(prev["time"], mid["time"]) and
                     same(mid["time"], nxt["time"])):
+                continue
+            # 장중 구멍(분봉 수집 공백·틱 누락)을 건너는 3봉도 FVG로 오인하지 않음
+            if not (mid["time"] - prev["time"] == unit and
+                    nxt["time"] - mid["time"] == unit):
                 continue
 
         is_bull = mid["close"] > mid["open"]

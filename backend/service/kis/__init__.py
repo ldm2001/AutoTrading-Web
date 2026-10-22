@@ -69,9 +69,9 @@ class KIS:
     async def index(self, code: str) -> dict:
         return await self.market.index(code)
 
-    # 주요 지수 시세를 조회
-    async def indices(self) -> list[dict]:
-        return await self.market.indices()
+    # 주요 지수 시세를 조회 — stale=False는 국면 게이트용 (장애 시 예외)
+    async def indices(self, stale: bool = True) -> list[dict]:
+        return await self.market.indices(stale)
 
     # 보유 종목과 요약을 조회
     async def holdings(self) -> tuple[dict[str, dict], dict]:

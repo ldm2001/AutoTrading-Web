@@ -129,6 +129,36 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
         restarts = [m for m in captured if "[봇 재시작" in m and "포기" not in m]
         self.assertEqual(len(restarts), 3)
 
+    # T12 — 재시작 직후 재대조(pend) 예외에도 재시작 계속 — 전파되면 crashed=False인 채 슈퍼바이저 소멸
+    async def test_t12(self):
+        settings.bot_restart_on_crash = True
+        bot_module._BACKOFF = (0, 0, 0)
+        bot = _bot()
+        bot.hours = lambda: True
+        bot.msg = noop
+        bot.redo = lambda: None
+
+        loops = {"n": 0}
+
+        # 첫 호출만 예외, 재시작 후 정상 종료하는 loop mock
+        async def once() -> None:
+            loops["n"] += 1
+            if loops["n"] == 1:
+                raise RuntimeError("kis down")
+
+        bot.loop = once
+
+        # 재시작 경로 재대조도 같은 장애로 실패
+        async def badpend() -> None:
+            raise RuntimeError("holdings down")
+
+        bot.pend = badpend
+
+        await bot.run()
+
+        self.assertEqual(loops["n"], 2)
+        self.assertFalse(bot.crashed)
+
     # T11 — FR-08: start→자연종료→start 반복 시 tick 핸들러 누적 없음
     async def test_t11(self):
         base = len(bus._handlers.get("tick", []))

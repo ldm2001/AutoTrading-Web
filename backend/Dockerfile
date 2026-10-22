@@ -11,7 +11,8 @@ COPY *.py .
 COPY api/ api/
 COPY service/ service/
 
-RUN mkdir -p trades/orders && chown -R app:app /app
+# 데이터 볼륨 마운트 지점을 app 소유로 미리 생성 — 빈 named volume이 이 소유권으로 초기화됨
+RUN mkdir -p service/data service/trades data/research && chown -R app:app /app
 
 USER app
 

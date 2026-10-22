@@ -12,10 +12,11 @@ def regime(
         for item in indices
         if item.get("change_percent") is not None
     ]
+    # 지수 데이터 없음 — 시장을 못 본 채 신규 매수하지 않음
     if not changes:
         return {
             "state": "unknown",
-            "allow_new_buys": True,
+            "allow_new_buys": False,
             "avg_change_pct": 0.0,
             "reason": "시장 지수 데이터 없음",
         }

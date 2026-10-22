@@ -48,7 +48,7 @@ class RiskMonitor:
             try:
                 sp = info.get("stop_price")
                 try:
-                    should_stop, pnl = await stoploss(
+                    should_stop, pnl, cp = await stoploss(
                         self.broker, code, info["avg_price"],
                         structural_price=sp,
                         fallback_pct=settings.stop_loss_pct,
@@ -64,7 +64,6 @@ class RiskMonitor:
                         f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
                     )
                     result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.raw(code)
                     await self.journal.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         wfout(code, "stop", cp, info["qty"], pnl)
@@ -77,7 +76,6 @@ class RiskMonitor:
                         f"[익절] {info['name']}({code}) 수익률 +{pnl:.2f}% ≥ +{settings.take_profit_pct}%"
                     )
                     result = await self.broker.sell(code, info["qty"])
-                    cp = await self.broker.raw(code)
                     await self.journal.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         wfout(code, "profit", cp, info["qty"], pnl)
@@ -86,8 +84,9 @@ class RiskMonitor:
             except Exception as e:
                 logger.error(f"Holdings check error ({code}): {e}")
 
-    # 장 마감 전 보유 종목 일괄 매도
+    # 장 마감 전 보유 종목 일괄 매도 — 대기 매수 먼저 재대조 (마지막 스캔 뒤 체결분도 청산 대상)
     async def sellpos(self) -> None:
+        await self.positions.pend()
         items, _ = await self.broker.holdings()
         for code, tracked in list(self.positions.bought.items()):
             info = items.get(code, tracked)

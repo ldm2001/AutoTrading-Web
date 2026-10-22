@@ -1,0 +1,8 @@
+# 빌드 컨텍스트 제외 — 로컬 런타임 데이터가 이미지에 구워지지 않게 + 컨텍스트 경량화
+venv/
+**/__pycache__/
+**/*.pyc
+tests/
+data/
+service/data/
+service/trades/

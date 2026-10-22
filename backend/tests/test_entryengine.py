@@ -51,7 +51,7 @@ class _Broker:
         self.buys.append((code, qty))
         return {"success": True}
 
-    async def indices(self):
+    async def indices(self, stale: bool = True):
         if isinstance(self._indices, Exception):
             raise self._indices
         return self._indices or []
@@ -143,10 +143,14 @@ class EntryEngineTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await e.gate())
         self.assertEqual(len(notifier.msgs), 1)
 
-    # gate — 지수 조회 실패 시 fail-open 허용
-    async def test_gate_failure_allows(self):
-        e = EntryEngine(_Broker(indices=RuntimeError("api down")), _Positions(), _Journal(), _Notifier(), {})
-        self.assertTrue(await e.gate())
+    # gate — 지수 조회 실패 시 차단 + unknown 경보 (fail-closed) — 허용하면 시장을 못 본 채 매수
+    async def test_gate_failure_blocks(self):
+        notifier = _Notifier()
+        e = EntryEngine(_Broker(indices=RuntimeError("api down")), _Positions(), _Journal(), notifier, {})
+        self.assertFalse(await e.gate())
+        self.assertEqual(len(notifier.msgs), 1)
+        self.assertIn("unknown", notifier.msgs[0])
+        self.assertIn("api down", notifier.msgs[0])
 
 
 if __name__ == "__main__":

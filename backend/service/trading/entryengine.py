@@ -18,13 +18,13 @@ class EntryEngine:
         self.names = names
         self._last_regime_state: str | None = None
 
-    # 시장 국면 게이트 — risk_off 시 신규매수 차단, 조회 실패 시 허용(fail-open)
+    # 시장 국면 게이트 — risk_off·지수 조회 실패 시 신규매수 차단 (fail-closed, stale 지수 금지)
     async def gate(self) -> bool:
         try:
-            regime = regime_state(await self.broker.indices())
+            regime = regime_state(await self.broker.indices(stale=False))
         except Exception as e:
             logger.warning("Market regime check failed: %s", e)
-            return True
+            regime = {"state": "unknown", "allow_new_buys": False, "reason": f"지수 조회 실패: {e}"}
 
         state = regime["state"]
         if state != self._last_regime_state:

@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # 예외 재시작 백오프 (초) — 길이 = 최대 재시도 횟수
 _BACKOFF = (30, 120, 600)
+# 장마감 청산 잔여 재시도 간격 (초) — 15:15~15:20 창에서 최대 5회
+_EOD_RETRY = 60
 
 # Bot 클래스 — 매수/손절/익절/장마감 자동매매 루프
 class Bot:
@@ -45,6 +47,8 @@ class Bot:
         self._last_tick_code: str = ""
         self._unsub_tick: Callable | None = None
         self.crashed: bool = False
+        self._soldout: bool = False
+        self._sell_next: datetime.datetime | None = None
 
     # 보유 포지션 상태 (PositionBook 위임 — 공개/테스트 호환)
     @property
@@ -124,7 +128,7 @@ class Bot:
                 "stop_loss_pct": settings.stop_loss_pct,
                 "take_profit_pct": settings.take_profit_pct,
                 "buy_score_threshold": settings.buy_score_threshold,
-                "market_filter": "risk_off 신규매수 차단",
+                "market_filter": "risk_off·지수 미확인 시 신규매수 차단",
             },
         }
 
@@ -196,6 +200,52 @@ class Bot:
     async def ent(self, sym: str, buy_amount: float) -> None:
         await self.entries.ent(sym, buy_amount)
 
+    # 매수 스캔 1회 — 대기 매수 재대조(게이트와 무관하게 손절 감시 편입) → 국면 게이트 → 진입
+    async def sweep(self) -> None:
+        await self.pend()
+        if not await self.entries.gate():
+            return
+        total_cash = await self.broker.cash()
+        buy_amount = total_cash * settings.buy_percent
+        for sym in self.scan():
+            if len(self.bought) >= settings.target_buy_count:
+                break
+            if sym in self.bought or sym in self.pending_buys:
+                continue
+            await self.ent(sym, buy_amount)
+            await asyncio.sleep(1)
+
+    # 장마감 청산 1회 시도 — 예외는 경보 후 False (루프로 전파되면 15:15 이후라 재시작 없이 종료), 잔여 없으면 True
+    async def eod(self) -> bool:
+        try:
+            await self.sellpos()
+        except Exception as e:
+            logger.exception("EOD liquidation failed")
+            await self.msg(f"[장마감 청산 오류] {e} — {_EOD_RETRY}초 후 재시도")
+            return False
+        return not (self.bought or self.pending_buys)
+
+    # 장마감 청산 + 종료 판정 — 15:15~15:20 잔여 있으면 재시도, 15:20 이후 잔여 경보 후 True (루프 종료)
+    async def closeout(self, now: datetime.datetime) -> bool:
+        t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
+        t_exit = now.replace(hour=15, minute=20, second=0, microsecond=0)
+        if t_sell < now < t_exit and not self._soldout:
+            if self._sell_next is None or now >= self._sell_next:
+                if self._sell_next is None:
+                    await self.msg("[장마감] 보유 종목 일괄 매도")
+                self._sell_next = now + datetime.timedelta(seconds=_EOD_RETRY)
+                self._soldout = await self.eod()
+        if now > t_exit:
+            left = [
+                f"{self.bought.get(c, {}).get('name') or self.names.get(c, c)}({c})"
+                for c in sorted(set(self.bought) | self.pending_buys)
+            ]
+            if left:
+                await self.msg(f"[장마감 청산 미완료] {', '.join(left)} — 오버나이트 보유, 수동 확인 필요")
+            await self.msg("프로그램을 종료합니다.")
+            return True
+        return False
+
     # 슈퍼바이저 — loop 예외 시 경보 + 바운드 재시작 (장중 한정), 종료 시 구독 정리
     async def run(self) -> None:
         attempts = 0
@@ -220,7 +270,11 @@ class Bot:
                     await self.msg(f"[봇 재시작 {attempts}/{len(_BACKOFF)}] {_BACKOFF[attempts - 1]}초 후 재시도")
                     await asyncio.sleep(_BACKOFF[attempts - 1])
                     self.redo()
-                    await self.pend()
+                    # 재대조 실패가 재시작을 막지 않게 — 다음 스캔 sweep()이 다시 재대조
+                    try:
+                        await self.pend()
+                    except Exception as pe:
+                        logger.warning("Pending reconcile on restart failed: %s", pe)
         finally:
             self.running = False
             if self._unsub_tick:
@@ -259,15 +313,15 @@ class Bot:
             lines.append("==================")
             await self.msg("\n".join(lines))
 
-            soldout = False
             last_eval_min = -1
+            self._soldout = False
+            self._sell_next = None
 
             # 메인 매매 루프
             while self.running:
                 now = datetime.datetime.now()
                 t_start = now.replace(hour=9, minute=5, second=0, microsecond=0)
                 t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
-                t_exit = now.replace(hour=15, minute=20, second=0, microsecond=0)
 
                 if not mkt(now.date()):
                     await self.msg("주말/휴장일이므로 프로그램을 종료합니다.")
@@ -282,32 +336,14 @@ class Bot:
                     # 매수 스캔 (5분마다, 동적 워치리스트)
                     if now.minute != last_eval_min and now.minute % 5 == 0:
                         last_eval_min = now.minute
-                        if not await self.entries.gate():
-                            continue
-                        await self.pend()
-                        total_cash = await self.broker.cash()
-                        buy_amount = total_cash * settings.buy_percent
-                        scan_list = self.scan()
-                        for sym in scan_list:
-                            if len(self.bought) >= settings.target_buy_count:
-                                break
-                            if sym in self.bought or sym in self.pending_buys:
-                                continue
-                            await self.ent(sym, buy_amount)
-                            await asyncio.sleep(1)
+                        await self.sweep()
 
                     # 30분마다 잔고 갱신
                     if now.minute % 30 == 0 and now.second < 10:
                         items, _ = await self.broker.holdings()
 
-                # 장 마감 전 일괄 매도
-                if t_sell < now < t_exit and not soldout:
-                    await self.msg("[장마감] 보유 종목 일괄 매도")
-                    await self.sellpos()
-                    soldout = True
-
-                if now > t_exit:
-                    await self.msg("프로그램을 종료합니다.")
+                # 장 마감 일괄 매도 (잔여 재시도) → 15:20 이후 종료
+                if await self.closeout(now):
                     break
 
                 # 이벤트 드리븐: tick 이벤트 또는 5초 타임아웃

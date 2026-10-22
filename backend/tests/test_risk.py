@@ -92,7 +92,7 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
             calls["n"] += 1
             if calls["n"] <= 2:
                 raise RuntimeError("transient")
-            return (False, 0.0)
+            return (False, 0.0, 70000)
 
         riskmonitor_module.stoploss = flaky
 

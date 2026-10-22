@@ -112,6 +112,10 @@ services:
       - REDIS_URL=rediss://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       - KAFKA_BOOTSTRAP=kafka:29092
       - ELASTICSEARCH_URL=https://elastic:${ELASTIC_PASSWORD:-changeme}@elasticsearch:9200
+    volumes:
+      - candle_data:/app/service/data
+      - trade_data:/app/service/trades
+      - research_data:/app/data/research
     depends_on:
       redis:
         condition: service_healthy
@@ -190,3 +194,6 @@ volumes:
   es_data:
   prometheus_data:
   grafana_data:
+  candle_data:
+  trade_data:
+  research_data:

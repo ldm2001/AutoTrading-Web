@@ -112,6 +112,13 @@ class BacktestResearchTest(unittest.TestCase):
         self.assertEqual(regime["state"], "risk_off")
         self.assertFalse(regime["allow_new_buys"])
 
+    # 지수 데이터 없음은 신규매수 차단 — 허용하면 시장을 못 본 채 매수
+    def test_market_regime_blocks_new_buys_without_data(self):
+        regime = mkt([])
+
+        self.assertEqual(regime["state"], "unknown")
+        self.assertFalse(regime["allow_new_buys"])
+
     def test_span_loads_old_session_files_without_calendar_gap(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = CandleStore(Path(tmp))

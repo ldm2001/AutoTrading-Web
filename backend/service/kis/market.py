@@ -26,14 +26,14 @@ class Market:
         self.cache = cache
         self.policy = policy
 
-    # 현재가 요약을 조회
-    async def price(self, code: str) -> dict:
+    # 현재가 요약을 조회 — stale=False면 장애 시 마지막 성공 값 대신 예외 전파
+    async def price(self, code: str, stale: bool = True) -> dict:
         key = f"price:{code}"
         cached = self.cache.get(key)
         if cached is not None:
             return cached
 
-        # 시세 조회 실패 시 마지막 성공 값을 허용
+        # 신선한 조회 값만 캐시 — stale 폴백 값이 캐시에 다시 실리지 않게
         async def slot() -> dict:
             client = await self.auth.ready()
             resp = await client.get(
@@ -43,7 +43,7 @@ class Market:
             )
             resp.raise_for_status()
             out = resp.json()["output"]
-            return {
+            result = {
                 "code": code,
                 "name": NAMES.get(code, code),
                 "price": int(out["stck_prpr"]),
@@ -53,14 +53,14 @@ class Market:
                 "market_cap": out.get("hts_avls", "0"),
                 "market": out.get("rprs_mrkt_kor_name", ""),
             }
+            self.cache.set(key, result, self.TTL_PRICE)
+            return result
 
-        result = await self.policy.safe(key, slot, mark="price", stale=True)
-        self.cache.set(key, result, self.TTL_PRICE)
-        return result
+        return await self.policy.safe(key, slot, mark="price", stale=stale)
 
-    # 현재가 숫자만 반환
+    # 현재가 숫자만 반환 — 손절 판정용이라 stale 폴백 금지
     async def raw(self, code: str) -> int:
-        return (await self.price(code))["price"]
+        return (await self.price(code, stale=False))["price"]
 
     # 5호가를 조회
     async def orderbook(self, code: str) -> dict:
@@ -118,7 +118,8 @@ class Market:
                     "FID_INPUT_DATE_1": start,
                     "FID_INPUT_DATE_2": end,
                     "FID_PERIOD_DIV_CODE": "D",
-                    "FID_ORG_ADJ_PRC": "1",
+                    # 이 TR은 0=수정주가·1=원주가 — FHKST01010400(target)과 의미 반대, 값 복사 금지
+                    "FID_ORG_ADJ_PRC": "0",
                 },
             )
             resp.raise_for_status()
@@ -236,6 +237,7 @@ class Market:
                 params={
                     "fid_cond_mrkt_div_code": "J",
                     "fid_input_iscd": code,
+                    # 이 TR은 1=수정주가반영 — FHKST03010100(daily)과 의미 반대, 값 복사 금지
                     "fid_org_adj_prc": "1",
                     "fid_period_div_code": "D",
                 },
@@ -248,14 +250,14 @@ class Market:
         self.cache.set(key, result, self.TTL_TARGET)
         return result
 
-    # 단일 지수 시세를 조회
-    async def index(self, code: str) -> dict:
+    # 단일 지수 시세를 조회 — stale=False면 장애 시 마지막 성공 값 대신 예외 전파
+    async def index(self, code: str, stale: bool = True) -> dict:
         key = f"index:{code}"
         cached = self.cache.get(key)
         if cached is not None:
             return cached
 
-        # 지수 조회 실패 시 마지막 성공 값을 허용
+        # 신선한 조회 값만 캐시 — stale 폴백 값이 캐시에 다시 실리지 않게
         async def slot() -> dict:
             client = await self.auth.ready()
             resp = await client.get(
@@ -265,29 +267,31 @@ class Market:
             )
             resp.raise_for_status()
             out = resp.json()["output"]
-            return {
+            result = {
                 "value": float(out["bstp_nmix_prpr"]),
                 "change": float(out.get("bstp_nmix_prdy_vrss", "0")),
                 "change_percent": float(out.get("bstp_nmix_prdy_ctrt", "0")),
             }
+            self.cache.set(key, result, self.TTL_INDEX)
+            return result
 
-        result = await self.policy.safe(key, slot, mark="index", stale=True)
-        self.cache.set(key, result, self.TTL_INDEX)
-        return result
+        return await self.policy.safe(key, slot, mark="index", stale=stale)
 
-    # 주요 지수 시세를 한 번에 모아서 조회
-    async def indices(self) -> list[dict]:
+    # 주요 지수 시세를 한 번에 모아서 조회 — stale=False면 하나라도 실패 시 예외 전파 (국면 게이트용)
+    async def indices(self, stale: bool = True) -> list[dict]:
         items = list(INDICES.items())
 
-        # 단일 지수 조회 → 실패 시 마지막 캐시 반환
+        # 단일 지수 조회 → 실패 시 마지막 캐시 반환 (strict면 전파)
         async def one(name: str, api_code: str, label: str) -> dict | None:
             try:
-                data = await self.index(api_code)
+                data = await self.index(api_code, stale=stale)
                 entry = {"code": name, "name": label, **data}
                 self.cache.set(f"idx_last:{name}", entry, 3600)
                 return entry
             except Exception as e:
                 logger.error("Index error (%s): %s", name, e)
+                if not stale:
+                    raise
                 return self.cache.get(f"idx_last:{name}")
 
         result = await asyncio.gather(*[one(name, api_code, label) for name, (api_code, label) in items])
