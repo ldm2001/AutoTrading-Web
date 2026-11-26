@@ -17,7 +17,7 @@ _task: asyncio.Task | None = None
 _dropped: int = 0
 
 
-def _http() -> httpx.AsyncClient:
+def pool() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(timeout=5.0)
@@ -25,7 +25,7 @@ def _http() -> httpx.AsyncClient:
 
 
 # 429 응답의 대기 시간 (바디 retry_after 우선, 없으면 헤더, 기본 1초)
-def _wait(resp: httpx.Response) -> float:
+def backoff(resp: httpx.Response) -> float:
     try:
         body = resp.json()
         if isinstance(body, dict) and body.get("retry_after") is not None:
@@ -40,22 +40,22 @@ def _wait(resp: httpx.Response) -> float:
 
 
 # 실제 웹훅 POST — 429 시 retry_after 만큼 1회 대기 후 재시도
-async def _post(msg: str) -> None:
+async def webhook(msg: str) -> None:
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     payload = {"content": f"[{now}] {msg}"}
-    client = _http()
+    client = pool()
     resp = await client.post(settings.discord_webhook_url, json=payload)
     if resp.status_code == 429:
-        await asyncio.sleep(_wait(resp))
+        await asyncio.sleep(backoff(resp))
         await client.post(settings.discord_webhook_url, json=payload)
 
 
 # 소비 태스크 — 큐에서 꺼내 순차 전송 (FIFO, 단일 소비자)
-async def _consume() -> None:
+async def consumer() -> None:
     while True:
         msg = await _queue.get()
         try:
-            await _post(msg)
+            await webhook(msg)
         except Exception as e:
             logger.error("Discord send failed: %s", e)
         finally:
@@ -63,7 +63,7 @@ async def _consume() -> None:
 
 
 # 큐 + 소비 태스크 기동 (멱등) — webhook 미설정 시 no-op
-async def start() -> None:
+async def boot() -> None:
     global _queue, _task, _dropped
     if not settings.discord_webhook_url:
         return
@@ -71,11 +71,11 @@ async def start() -> None:
         return
     _queue = asyncio.Queue(maxsize=_MAXSIZE)
     _dropped = 0
-    _task = asyncio.create_task(_consume())
+    _task = asyncio.create_task(consumer())
 
 
 # 메시지 enqueue — put_nowait만 수행해 즉시 반환 (큐 가득 시 드롭+카운트)
-async def notify(msg: str) -> None:
+async def notice(msg: str) -> None:
     global _dropped
     if not settings.discord_webhook_url or _queue is None:
         return
@@ -87,7 +87,7 @@ async def notify(msg: str) -> None:
 
 
 # 종료 — 5초 한도 drain → 소비 태스크 취소 → 클라이언트 정리
-async def close() -> None:
+async def shutdown() -> None:
     global _client, _queue, _task
     if _queue is not None:
         try:

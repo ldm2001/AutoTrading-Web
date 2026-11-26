@@ -8,14 +8,14 @@ from service.trading.positionbook import PositionBook
 
 
 # Redis 없는 캐시 스텁
-class _Cache:
+class CacheStub:
     redis = None
 
 
 # 잔고 스텁
-class _Broker:
+class BrokerStub:
     def __init__(self, holdings: dict[str, dict]) -> None:
-        self.cache = _Cache()
+        self.cache = CacheStub()
         self._h = holdings
 
     async def holdings(self) -> tuple[dict[str, dict], dict]:
@@ -25,22 +25,22 @@ class _Broker:
 # PositionBook — 손절가 승계 / 제거 / 잔고 대조
 class PositionBookTest(unittest.IsolatedAsyncioTestCase):
     # acct — 기존 손절가 승계 + 명시값 우선
-    def test_acct_stop_price(self):
-        pb = PositionBook(_Broker({}), {})
+    def testacctstop(self):
+        pb = PositionBook(BrokerStub({}), {})
         pb.bought = {"005930": {"stop_price": 900.0}}
         self.assertEqual(pb.acct("005930", {"avg_price": 1000, "qty": 1})["stop_price"], 900.0)
         self.assertEqual(pb.acct("005930", {"avg_price": 1000, "qty": 1}, stop_price=950.0)["stop_price"], 950.0)
 
     # drop — 보유 제거
-    def test_drop_removes(self):
-        pb = PositionBook(_Broker({}), {})
+    def testdrop(self):
+        pb = PositionBook(BrokerStub({}), {})
         pb.bought = {"005930": {"qty": 1}}
         pb.drop("005930")
         self.assertNotIn("005930", pb.bought)
 
     # pend — 대기 매수를 실제 잔고로 반영 후 pending 비움
-    async def test_pend_reconciles(self):
-        broker = _Broker({"005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"}})
+    async def testpend(self):
+        broker = BrokerStub({"005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"}})
         pb = PositionBook(broker, {})
         pb.pending_buys = {"005930"}
         await pb.pend()
@@ -49,8 +49,8 @@ class PositionBookTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pb.bought["005930"]["qty"], 2)
 
     # untracked — 계좌 보유 중 봇 미추적 종목만 반환
-    async def test_untracked_holdings(self):
-        broker = _Broker({
+    async def testorphans(self):
+        broker = BrokerStub({
             "005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"},
             "000660": {"avg_price": 2000, "qty": 1, "name": "SK하이닉스"},
         })
@@ -59,8 +59,8 @@ class PositionBookTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(await pb.untracked()), ["000660"])
 
     # untracked — 전부 추적 중이면 빈 결과
-    async def test_untracked_empty(self):
-        broker = _Broker({"005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"}})
+    async def testnoorphan(self):
+        broker = BrokerStub({"005930": {"avg_price": 1000, "qty": 2, "name": "삼성전자"}})
         pb = PositionBook(broker, {})
         pb.bought = {"005930": {"qty": 2}}
         self.assertEqual(await pb.untracked(), {})

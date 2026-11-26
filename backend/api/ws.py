@@ -118,7 +118,7 @@ async def loop():
             stocks: list[dict] = []
 
             if market_open and codes:
-                await kis.wsync(codes)
+                await kis.wsubs(codes)
                 stocks = kis.wrows(codes)
                 live = kis.wlive()
                 if not live or not full(codes, stocks):
@@ -130,14 +130,14 @@ async def loop():
                 if stocks:
                     active_session_date = now.date().isoformat()
             elif manager.price_clients and codes:
-                await kis.wclose()
+                await kis.wshutdown()
                 stocks = kis.wrows(codes)
                 if not full(codes, stocks):
                     snap = await kis.prices(codes)
                     kis.wseed(snap)
                     stocks = kis.wrows(codes) or snap
             else:
-                await kis.wclose()
+                await kis.wshutdown()
 
             if manager.price_clients:
                 idx    = await kis.indices()
@@ -160,4 +160,4 @@ async def loop():
 
 
 # 하위 호환 별칭
-price_loop = loop
+priceloop = loop

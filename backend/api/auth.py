@@ -19,7 +19,7 @@ _MAX_TRACKED_IPS = 1024
 
 
 # 오래된 IP 엔트리 정리 (최대 크기 초과 시 가장 오래된 것부터 제거)
-def trim() -> None:
+def cleanup() -> None:
     if len(_failures) <= _MAX_TRACKED_IPS:
         return
     now = time.time()
@@ -34,7 +34,7 @@ def trim() -> None:
 
 
 # IP 잠금 여부 확인 (15분 내 5회 실패 시 차단)
-def ban(ip: str) -> None:
+def lockout(ip: str) -> None:
     now = time.time()
     if ip in _failures:
         _failures[ip] = [t for t in _failures[ip] if now - t < _LOCKOUT_WINDOW]
@@ -49,11 +49,11 @@ def ban(ip: str) -> None:
 
 
 # 인증 실패 기록
-def fail(ip: str) -> None:
+def failure(ip: str) -> None:
     if ip not in _failures:
         _failures[ip] = []
     _failures[ip].append(time.time())
-    trim()
+    cleanup()
 
 
 def keyok(key: str | None) -> bool:
@@ -68,10 +68,10 @@ async def guard(request: Request, key: str | None = Security(_header)) -> str:
         raise HTTPException(503, "Trading API disabled (API_KEY not set)")
 
     client_ip = request.client.host if request.client else "unknown"
-    ban(client_ip)
+    lockout(client_ip)
 
     if not keyok(key):
-        fail(client_ip)
+        failure(client_ip)
         logger.warning("Unauthorized API access attempt from %s", client_ip)
         raise HTTPException(403, "Invalid or missing API key")
     return key

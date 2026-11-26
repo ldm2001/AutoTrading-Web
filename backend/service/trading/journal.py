@@ -4,8 +4,8 @@ from collections.abc import Callable
 from service.trading.records import trade_log
 
 # records.trade_log 별칭 — 내부 호출과 테스트 몽키패치가 이 이름을 참조
-trade_log_append = trade_log.append
-trade_log_rows = trade_log.rows
+traderec = trade_log.record
+traderows = trade_log.rows
 
 
 # 거래 내역을 기록·보관하고 체결 이벤트를 발행
@@ -18,8 +18,8 @@ class TradeJournal:
         self.ontrade: Callable | None = None
 
     # 오늘 거래 내역 복원
-    def load(self) -> None:
-        self.logs = trade_log_rows()
+    def recovery(self) -> None:
+        self.logs = traderows()
 
     # 거래 1건 기록 — 로그/파일/영속/알림/이벤트
     async def rec(self, code: str, name: str, kind: str, qty: int, price: int, ok: bool) -> None:
@@ -35,7 +35,7 @@ class TradeJournal:
             "message": "성공" if ok else "실패",
         }
         self.logs.append(entry)
-        trade_log_append(entry)
+        traderec(entry)
         self.snap()
         action = "매수" if kind == "buy" else "매도"
         await self.notifier.msg(f"[{action} {'성공' if ok else '실패'}] {name or code} {qty}주 @{price:,}")

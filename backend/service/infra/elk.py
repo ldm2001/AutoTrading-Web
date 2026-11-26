@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 _client = None
 
-def _es():
+def esconn():
     global _client
     if _client is not None:
         return _client
@@ -33,7 +33,7 @@ def _es():
 
 # 주문 로그를 ES에 인덱싱
 def order(entry: dict[str, Any]) -> None:
-    es = _es()
+    es = esconn()
     if es is None:
         return
     try:
@@ -45,7 +45,7 @@ def order(entry: dict[str, Any]) -> None:
 
 # 틱 데이터를 ES에 벌크 인덱싱
 def tick(code: str, price: int, volume: int, ts: datetime.datetime) -> None:
-    es = _es()
+    es = esconn()
     if es is None:
         return
     try:
@@ -60,7 +60,7 @@ def tick(code: str, price: int, volume: int, ts: datetime.datetime) -> None:
 
 # 봇 이벤트 로그 (시작/종료/에러 등)
 def event(event_type: str, detail: str = "", **extra: Any) -> None:
-    es = _es()
+    es = esconn()
     if es is None:
         return
     try:

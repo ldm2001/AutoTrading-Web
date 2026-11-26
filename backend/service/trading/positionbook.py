@@ -17,7 +17,7 @@ class PositionBook:
         self.pending_stops: dict[str, float] = {}
 
     # 봇 시작 시 상태 초기화
-    def reset(self) -> None:
+    def blank(self) -> None:
         self.bought = {}
         self.pending_buys = set()
         self.pending_stops = {}

@@ -20,7 +20,7 @@ def route(path: str, method: str) -> APIRoute:
 
 
 class TradeApiAuthTest(unittest.TestCase):
-    def test_sensitive_trading_reads_require_api_key(self):
+    def testapikey(self):
         sensitive_reads = [
             ("/api/trading/watchlist", "GET"),
             ("/api/trading/portfolio", "GET"),
@@ -39,10 +39,10 @@ class TradeApiAuthTest(unittest.TestCase):
                     f"{method} {path} must depend on guard",
                 )
 
-    def test_watchlist_normalizes_unique_numeric_codes(self):
+    def testwatchcodes(self):
         saved: list[list[str]] = []
-        original = trade_module.save_watchlist
-        trade_module.save_watchlist = lambda codes: saved.append(codes)
+        original = trade_module.watchrec
+        trade_module.watchrec = lambda codes: saved.append(codes)
         try:
             import asyncio
             result = asyncio.run(watchput(
@@ -50,12 +50,12 @@ class TradeApiAuthTest(unittest.TestCase):
                 _key="ok",
             ))
         finally:
-            trade_module.save_watchlist = original
+            trade_module.watchrec = original
 
         self.assertEqual(result, {"codes": ["005930", "000660"], "count": 2})
         self.assertEqual(saved, [["005930", "000660"]])
 
-    def test_watchlist_rejects_invalid_codes(self):
+    def testwatchinvalid(self):
         with self.assertRaises(HTTPException) as raised:
             import asyncio
             asyncio.run(watchput(

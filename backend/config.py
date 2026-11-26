@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     buy_score_threshold: int = 55     # 매수 시그널 최소 스코어
     use_prediction: bool = False      # Transformer 예측 연동 (느림, 선택)
     bot_restart_on_crash: bool = True # 장중 예외 종료 시 백오프 재시작 (3회 한도)
+    # 공용 예측 모델 폴더 (meta.json·weights.pt, offline.pool이 만듦) — research_data 볼륨 안, 컨테이너 /app/data/research/models/pooled
+    pooled_dir: str = str(Path(__file__).resolve().parent / "data" / "research" / "models" / "pooled")
 
     # 모의투자 여부 — URL_BASE가 모의 도메인이면 자동 True (주문/잔고 TR 코드 분기 기준)
     @property

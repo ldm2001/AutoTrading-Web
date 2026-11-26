@@ -11,7 +11,7 @@ _cached_mtime: float = 0.0
 
 
 # 파일에서 워치리스트 로드 (실패 시 기본 종목 반환)
-def load() -> list[str]:
+def current() -> list[str]:
     global _cached_list, _cached_mtime
 
     if not _WATCHLIST_FILE.exists():
@@ -38,7 +38,7 @@ def load() -> list[str]:
 
 
 # 워치리스트를 JSON 파일로 저장
-def save(codes: list[str]) -> None:
+def record(codes: list[str]) -> None:
     global _cached_list, _cached_mtime
     _WATCHLIST_FILE.write_text(json.dumps(codes, ensure_ascii=False))
     _cached_list = list(codes)
@@ -50,4 +50,4 @@ def save(codes: list[str]) -> None:
 
 # 현재 워치리스트 종목 반환
 def symbols() -> list[str]:
-    return load()
+    return current()

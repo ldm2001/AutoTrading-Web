@@ -9,7 +9,7 @@ from service.trading.riskmonitor import RiskMonitor
 
 
 # 알림 스텁
-class _Notifier:
+class NotifierStub:
     def __init__(self) -> None:
         self.msgs: list[str] = []
 
@@ -18,7 +18,7 @@ class _Notifier:
 
 
 # 포지션 스텁
-class _Positions:
+class PositionStub:
     def __init__(self, bought: dict) -> None:
         self.bought = bought
         self.dropped: list[str] = []
@@ -35,7 +35,7 @@ class _Positions:
 
 
 # 기록 스텁
-class _Journal:
+class JournalStub:
     def __init__(self) -> None:
         self.recs: list = []
 
@@ -44,12 +44,12 @@ class _Journal:
 
 
 # broker 스텁
-class _Broker:
+class BrokerStub:
     def __init__(self, raw: int = 0) -> None:
         self._raw = raw
         self.sold: list = []
 
-    async def sell(self, code: str, qty: int) -> dict:
+    async def sale(self, code: str, qty: int) -> dict:
         self.sold.append((code, qty))
         return {"success": True}
 
@@ -71,69 +71,69 @@ class RiskMonitorTest(unittest.IsolatedAsyncioTestCase):
         rm_module.stoploss = self._sl
 
     # 손절 신호 → 매도 + 제거 + 기록
-    async def test_stop_sells_and_drops(self):
+    async def testslexit(self):
         async def sl(*_a, **_k):
             return (True, -5.0, 66000)
         rm_module.stoploss = sl
-        pos = _Positions({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
-        broker = _Broker(66000)
-        journal = _Journal()
-        r = RiskMonitor(broker, pos, journal, _Notifier(), {})
+        pos = PositionStub({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
+        broker = BrokerStub(66000)
+        journal = JournalStub()
+        r = RiskMonitor(broker, pos, journal, NotifierStub(), {})
         await r.risk()
         self.assertEqual(broker.sold, [("005930", 1)])
         self.assertIn("005930", pos.dropped)
         self.assertEqual(len(journal.recs), 1)
 
     # 익절 신호 → 매도 + 제거
-    async def test_profit_sells_and_drops(self):
+    async def testtpexit(self):
         async def sl(*_a, **_k):
             return (False, 100.0, 140000)
         rm_module.stoploss = sl
-        pos = _Positions({"005930": {"name": "삼성", "qty": 2, "avg_price": 70000}})
-        broker = _Broker(140000)
-        r = RiskMonitor(broker, pos, _Journal(), _Notifier(), {})
+        pos = PositionStub({"005930": {"name": "삼성", "qty": 2, "avg_price": 70000}})
+        broker = BrokerStub(140000)
+        r = RiskMonitor(broker, pos, JournalStub(), NotifierStub(), {})
         await r.risk()
         self.assertEqual(broker.sold, [("005930", 2)])
         self.assertIn("005930", pos.dropped)
 
     # 손절 매도 성공 후 시세 재조회가 실패해도 판정가로 기록·제거 — 재조회하면 보유로 남아 재매도 시도
-    async def test_stop_records_decision_price(self):
+    async def testslprice(self):
         async def sl(*_a, **_k):
             return (True, -5.0, 66500)
         rm_module.stoploss = sl
-        pos = _Positions({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
-        broker = _Broker(RuntimeError("kis down"))
-        journal = _Journal()
-        r = RiskMonitor(broker, pos, journal, _Notifier(), {})
+        pos = PositionStub({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
+        broker = BrokerStub(RuntimeError("kis down"))
+        journal = JournalStub()
+        r = RiskMonitor(broker, pos, journal, NotifierStub(), {})
         await r.risk()
         self.assertEqual(broker.sold, [("005930", 1)])
         self.assertIn("005930", pos.dropped)
         self.assertEqual(journal.recs[0][4], 66500)
 
     # 익절 매도 성공 후 시세 재조회가 실패해도 판정가로 기록·제거
-    async def test_profit_records_decision_price(self):
+    async def testtpprice(self):
         async def sl(*_a, **_k):
             return (False, 6.0, 74200)
         rm_module.stoploss = sl
-        pos = _Positions({"005930": {"name": "삼성", "qty": 2, "avg_price": 70000}})
-        broker = _Broker(RuntimeError("kis down"))
-        journal = _Journal()
-        r = RiskMonitor(broker, pos, journal, _Notifier(), {})
+        pos = PositionStub({"005930": {"name": "삼성", "qty": 2, "avg_price": 70000}})
+        broker = BrokerStub(RuntimeError("kis down"))
+        journal = JournalStub()
+        r = RiskMonitor(broker, pos, journal, NotifierStub(), {})
         await r.risk()
         self.assertEqual(broker.sold, [("005930", 2)])
         self.assertIn("005930", pos.dropped)
         self.assertEqual(journal.recs[0][4], 74200)
 
     # riskgate — 2초 스로틀
-    async def test_riskgate_throttle(self):
-        pos = _Positions({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
-        r = RiskMonitor(_Broker(), pos, _Journal(), _Notifier(), {})
+    async def testthrottle(self):
+        pos = PositionStub({"005930": {"name": "삼성", "qty": 1, "avg_price": 70000}})
+        r = RiskMonitor(BrokerStub(), pos, JournalStub(), NotifierStub(), {})
         calls = {"n": 0}
 
-        async def fake() -> None:
+        async def stub() -> None:
             calls["n"] += 1
 
-        r.risk = fake
+        r.risk = stub
         await r.riskgate()
         await r.riskgate()
         self.assertEqual(calls["n"], 1)

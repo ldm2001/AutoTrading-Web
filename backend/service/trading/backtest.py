@@ -1,5 +1,6 @@
 # 이벤트 기반 백테스터 — 9팩터 스코어링 전략 검증
 import logging
+from bisect import bisect_left
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -30,7 +31,7 @@ class Trade:
     exit_bar: int
     exit_time: str
     exit_price: float
-    exit_reason: str  # stop | tp | trail
+    exit_reason: str  # stop | tp | trail | end (구간 마지막 봉 종가 강제 청산)
     pnl_pct: float
     cost_bps: float = 0.0
 
@@ -57,12 +58,13 @@ class BacktestScorer:
     def __init__(self):
         self._s = Scorer()
 
-    # 9팩터 점수 + FVG 손절가 산출
+    # 9팩터 점수 + FVG 손절가 산출 — prediction은 오프라인 주입용 (None이면 Direction 0점, 라이브와 같은 Scorer.pred·같은 문)
     def val(
         self,
         daily: list[dict],
         candles_15m: list[dict],
         price: int,
+        prediction: dict | None = None,
     ) -> tuple[float, float | None]:
         ind = indicators.summary(daily)
         smc_candles = candles_15m if candles_15m else daily
@@ -71,14 +73,14 @@ class BacktestScorer:
         macd_s, _ = self._s.macd(ind["macd"])
         bb_s, _ = self._s.bb(ind["bollinger"])
         vol_s, _ = self._s.vol(daily, price)
-        pred_s, _ = self._s.pred(None, price)
+        pred_s, _ = self._s.pred(prediction, price)
         fvg_s, _ = self._s.fvg(daily, price)
         ob_s, _ = self._s.ob(daily, price)
         fvg15_s, _ = self._s.fvg15(smc_candles, price)
         str_s, _ = self._s.struct(smc_candles)
 
         total = rsi_s + macd_s + bb_s + vol_s + pred_s + fvg_s + ob_s + fvg15_s + str_s
-        stop = smc.stop(smc_candles, float(price))  # FVG 기반 동적 손절가
+        stop = smc.slprice(smc_candles, float(price))  # FVG 기반 동적 손절가
         return round(total, 1), stop
 
 # datetime → 문자열 변환 유틸리티
@@ -87,18 +89,59 @@ def ts(dt) -> str:
         return dt.strftime("%Y-%m-%d %H:%M")
     return str(dt)
 
-# 15분봉 순회하며 진입/청산 시뮬레이션
+# 봉 날짜보다 앞선 가장 최근 기준일의 예측 — 그 기준일이 직전 lag거래일(일봉 기준)보다 오래됐으면 쓰지 않음
+# dates는 정렬된 기준일, daily_slice는 봉 날짜 앞의 일봉 (마지막 행 = 직전 거래일)
+def prior(table: dict, dates: list[str], day: str, daily_slice: list[dict], lag: int = 1) -> dict | None:
+    k = bisect_left(dates, day)
+    if k == 0 or lag < 1 or not daily_slice:
+        return None
+    base = dates[k - 1]
+    floor = str(daily_slice[-min(lag, len(daily_slice))].get("date", ""))[:10]
+    return table[base] if base >= floor else None
+
+# 15분봉 순회하며 진입/청산 시뮬레이션 — 채점기는 항상 BacktestScorer (Direction은 Scorer.pred의 문을 지남)
+# span=(first, last)면 그 인덱스 구간만 평가 — 채점 이력은 전체 시계열 candles_15m[:i] 그대로
+# forecasts={기준일: 예측 dict}면 Direction에 주입 (/api/backtest는 넘기지 않음, 문이 닫혀 있으면 0점이라 주입 없음과 같음)
+# scores={봉 번호: (점수, 손절가) 또는 None(일봉 부족)} — 처음 쓰는 봉만 채점해 담고 다시 씀
+# 같은 candles_15m·daily·forecasts·lag 호출끼리만 공유 (grid 조합, API의 bt·grid·wf)
 def bt(
     code: str,
     candles_15m: list[dict],
     daily: list[dict],
     cfg: BacktestConfig | None = None,
+    *,
+    span: tuple[int, int] | None = None,
+    forecasts: dict | None = None,
+    lag: int = 1,
+    scores: dict | None = None,
+) -> BacktestResult:
+    return playback(BacktestScorer(), code, candles_15m, daily, cfg,
+                    span=span, forecasts=forecasts, lag=lag, scores=scores)
+
+# 시뮬레이션 본체 — 채점기를 받음. 서비스 코드는 bt로만 부름(채점기 BacktestScorer)
+# 다른 채점기(문 없는 Direction)를 넘기는 것은 오프라인 하네스뿐 (offline.injection.LabScorer, tests/test_gate.py가 고정)
+def playback(
+    scorer: BacktestScorer,
+    code: str,
+    candles_15m: list[dict],
+    daily: list[dict],
+    cfg: BacktestConfig | None = None,
+    *,
+    span: tuple[int, int] | None = None,
+    forecasts: dict | None = None,
+    lag: int = 1,
+    scores: dict | None = None,
 ) -> BacktestResult:
     if cfg is None:
         cfg = BacktestConfig()
 
-    scorer = BacktestScorer()
+    scores = {} if scores is None else scores
+    table = {str(k)[:10]: v for k, v in (forecasts or {}).items()}
+    dates = sorted(table)
     n = len(candles_15m)
+    first, last = span if span else (0, n)
+    first = max(0, min(first, n))
+    last = max(first, min(last, n))
     trades: list[Trade] = []
     equity = [1.0]
 
@@ -108,7 +151,7 @@ def bt(
     stop_price: float | None = None
     tp_price = 0.0
 
-    for i in range(1, n):
+    for i in range(max(first, 1), last):
         bar = candles_15m[i]
         bar_time = bar["time"]
 
@@ -116,18 +159,18 @@ def bt(
         if in_trade:
             hold_bars = i - entry_bar
 
-            # 1) FVG 동적 손절
+            # 1) FVG 동적 손절 — 시가가 손절가 아래로 갭 하락하면 시가에 체결
             if stop_price and bar["low"] <= stop_price:
                 out(trades, equity, entry_bar, candles_15m,
-                    i, bar_time, entry_price, stop_price, "stop", cfg)
+                    i, bar_time, entry_price, min(float(bar["open"]), stop_price), "stop", cfg)
                 in_trade = False
                 continue
 
-            # 2) 고정 % 폴백 손절
+            # 2) 고정 % 폴백 손절 — 갭 하락은 시가 체결
             fallback = entry_price * (1 - cfg.fallback_stop_pct / 100)
             if bar["low"] <= fallback:
                 out(trades, equity, entry_bar, candles_15m,
-                    i, bar_time, entry_price, fallback, "stop", cfg)
+                    i, bar_time, entry_price, min(float(bar["open"]), fallback), "stop", cfg)
                 in_trade = False
                 continue
 
@@ -147,15 +190,20 @@ def bt(
 
         # 진입 체크 (미래 참조 금지: candles[:i]만 사용)
         if not in_trade:
-            bar_date = bar_time.date().isoformat() if isinstance(bar_time, datetime) else str(bar_time)[:10]
-            daily_slice = [c for c in daily if str(c.get("date", ""))[:10] < bar_date]
-            if len(daily_slice) < 35:
+            if i not in scores:
+                bar_date = bar_time.date().isoformat() if isinstance(bar_time, datetime) else str(bar_time)[:10]
+                daily_slice = [c for c in daily if str(c.get("date", ""))[:10] < bar_date]
+                mark = None
+                if len(daily_slice) >= 35:
+                    prediction = prior(table, dates, bar_date, daily_slice, lag) if dates else None
+                    mark = scorer.val(daily_slice, candles_15m[:i], bar["close"], prediction)
+                scores[i] = mark
+            if scores[i] is None:
                 continue
+            total, stop = scores[i]
 
-            total, stop = scorer.val(daily_slice, candles_15m[:i], bar["close"])
-
-            # 시그널 발생 → 다음 봉 시가에 진입 (슬리피지 반영)
-            if total >= cfg.buy_threshold and i + 1 < n:
+            # 시그널 발생 → 다음 봉 시가에 진입 (슬리피지 반영, 다음 봉이 구간 안일 때만)
+            if total >= cfg.buy_threshold and i + 1 < last:
                 nxt = candles_15m[i + 1]
                 entry_price = bpx(float(nxt["open"]), cfg)
                 tp_price = entry_price * (1 + cfg.take_profit_pct / 100)
@@ -163,7 +211,13 @@ def bt(
                 entry_bar = i + 1
                 in_trade = True
 
-    return stat(code, n, trades, equity, candles_15m, cfg)
+    # 구간 끝까지 들고 있던 포지션 — 버리지 않고 마지막 봉 종가로 강제 청산해 집계
+    if in_trade:
+        tail = candles_15m[last - 1]
+        out(trades, equity, entry_bar, candles_15m,
+            last - 1, tail["time"], entry_price, float(tail["close"]), "end", cfg)
+
+    return stat(code, last - first, trades, equity, candles_15m[first:last], cfg)
 
 # 거래 청산 기록 + 에퀴티 갱신
 def out(
@@ -207,6 +261,8 @@ def stat(
     result.trades = trades
     result.total_trades = len(trades)
     result.validation_warnings = risks(candles_15m)
+    if any(t.exit_reason == "end" for t in trades):
+        result.validation_warnings.append("구간 끝까지 보유한 포지션은 마지막 봉 종가로 강제 청산해 집계했습니다(사유 end).")
     result.buy_hold_return_pct = bh(candles_15m, cfg)
     if result.buy_hold_return_pct is not None:
         result.excess_return_pct = round(result.cum_return_pct - result.buy_hold_return_pct, 2)
@@ -304,7 +360,10 @@ def grid(
     buy_thresholds: list[float],
     take_profit_pcts: list[float],
     stop_pcts: list[float],
+    scores: dict | None = None,
 ) -> list[dict]:
+    # 봉 점수는 조합과 무관 — 표 하나를 모든 조합이 같이 씀 (넘겨받으면 호출자와도 공유)
+    scores = {} if scores is None else scores
     rows: list[dict] = []
     for threshold in buy_thresholds:
         for tp in take_profit_pcts:
@@ -319,6 +378,7 @@ def grid(
                         take_profit_pct=tp,
                         fallback_stop_pct=stop,
                     ),
+                    scores=scores,
                 )
                 rows.append({
                     "buy_threshold": threshold,
@@ -339,24 +399,27 @@ def wf(
     cfg: BacktestConfig,
     *,
     windows: int = 6,
+    scores: dict | None = None,
 ) -> list[dict]:
     if windows <= 0 or not candles_15m:
         return []
 
+    # 구간마다 같은 전체 시계열로 채점하므로 표 하나를 같이 씀
+    scores = {} if scores is None else scores
     n = len(candles_15m)
     size = max(1, n // windows)
     rows: list[dict] = []
     for idx in range(windows):
         start = idx * size
         end = n if idx == windows - 1 else min(n, (idx + 1) * size)
-        chunk = candles_15m[start:end]
-        if not chunk:
+        if start >= end:
             continue
-        result = bt(code, chunk, daily, cfg)
+        # 구간을 잘라 넘기지 않고 전체 시계열의 인덱스 범위로 평가 (앞 구간 15분봉도 채점 이력)
+        result = bt(code, candles_15m, daily, cfg, span=(start, end), scores=scores)
         rows.append({
             "window": idx + 1,
-            "start_time": ts(chunk[0]["time"]),
-            "end_time": ts(chunk[-1]["time"]),
+            "start_time": ts(candles_15m[start]["time"]),
+            "end_time": ts(candles_15m[end - 1]["time"]),
             "total_bars": result.total_bars,
             "total_trades": result.total_trades,
             "cum_return_pct": result.cum_return_pct,

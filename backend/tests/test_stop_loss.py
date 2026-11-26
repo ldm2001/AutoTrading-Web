@@ -8,7 +8,7 @@ from service.trading.stoploss import stoploss
 
 
 # raw()만 노출하는 Quotes 스텁 (값 또는 예외)
-class _Q:
+class QuoteStub:
     def __init__(self, price):
         self._p = price
 
@@ -21,30 +21,30 @@ class _Q:
 # stoploss 순수 함수 검증
 class StopLossTest(unittest.IsolatedAsyncioTestCase):
     # 구조적 손절가 하회 시 손절
-    async def test_structural_hit(self):
-        stop, pnl, _ = await stoploss(_Q(900), "x", 1000, structural_price=950)
+    async def teststructhit(self):
+        stop, pnl, _ = await stoploss(QuoteStub(900), "x", 1000, structural_price=950)
         self.assertTrue(stop)
 
     # 구조적 손절가 위 + 폴백 미달 → 보유
-    async def test_structural_ok(self):
-        stop, _, _ = await stoploss(_Q(1000), "x", 1000, structural_price=950, fallback_pct=-3.0)
+    async def teststructok(self):
+        stop, _, _ = await stoploss(QuoteStub(1000), "x", 1000, structural_price=950, fallback_pct=-3.0)
         self.assertFalse(stop)
 
     # 구조적 없음 + 고정 % 하회 → 손절
-    async def test_fallback_pct(self):
-        stop, pnl, _ = await stoploss(_Q(960), "x", 1000, fallback_pct=-3.0)
+    async def testfallback(self):
+        stop, pnl, _ = await stoploss(QuoteStub(960), "x", 1000, fallback_pct=-3.0)
         self.assertTrue(stop)
         self.assertAlmostEqual(pnl, -4.0)
 
     # 판정에 쓴 현재가를 함께 반환 — 호출부가 매도 후 시세를 재조회하지 않도록
-    async def test_returns_decision_price(self):
-        _, _, current = await stoploss(_Q(960), "x", 1000, fallback_pct=-3.0)
+    async def testdecision(self):
+        _, _, current = await stoploss(QuoteStub(960), "x", 1000, fallback_pct=-3.0)
         self.assertEqual(current, 960)
 
     # 시세 조회 예외는 그대로 전파 (fail-safe)
-    async def test_exception_propagates(self):
+    async def testexception(self):
         with self.assertRaises(RuntimeError):
-            await stoploss(_Q(RuntimeError("kis down")), "x", 1000)
+            await stoploss(QuoteStub(RuntimeError("kis down")), "x", 1000)
 
 
 if __name__ == "__main__":

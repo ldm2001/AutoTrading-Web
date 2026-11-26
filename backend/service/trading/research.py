@@ -24,6 +24,15 @@ def wftab(code: str, data: dict[str, Any], root: Path | None = None) -> int:
     return len(wfrows(code, root=base))
 
 
+# 평가 기록 한 줄 추가 — {root}/{시각의 날짜}.jsonl (기본 research/evals, 하루 한 파일·추가 전용, 종목별 {code}.jsonl과 따로)
+# 예외는 호출자(EntryEngine)가 잡아 경고만 남김
+def wfverdict(row: dict[str, Any], root: Path | None = None) -> None:
+    base = root or _ROOT / "evals"
+    base.mkdir(parents=True, exist_ok=True)
+    with (base / f"{str(row['time'])[:10]}.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+
+
 def wfrows(code: str, root: Path | None = None) -> list[dict[str, Any]]:
     base = root or _ROOT
     path = base / f"{code}.jsonl"

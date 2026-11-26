@@ -8,10 +8,10 @@ import main
 
 
 class SecurityOriginTest(unittest.TestCase):
-    def test_local_dev_loopback_origin_is_allowed(self):
+    def testloopback(self):
         self.assertIn("http://127.0.0.1:5173", main._ALLOWED_ORIGINS)
 
-    def test_cors_origins_match_csrf_origins(self):
+    def testcorsparity(self):
         cors = next(
             middleware
             for middleware in main.app.user_middleware

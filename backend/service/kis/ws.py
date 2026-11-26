@@ -112,19 +112,19 @@ class KISWS:
         return self._task is not None and not self._task.done() and (time.time() - self._seen) < _STALE
 
     # 구독 종목을 맞춘다
-    async def sync(self, codes: list[str]) -> None:
+    async def subs(self, codes: list[str]) -> None:
         want = tuple(dict.fromkeys(str(code).zfill(6) for code in codes if code))
         async with self._lock:
             if want == self._want and self._task is not None and not self._task.done():
                 return
             self._want = want
-            await self.close()
+            await self.shutdown()
             if not want:
                 return
             self._task = asyncio.create_task(self.loop())
 
     # 연결을 닫는다
-    async def close(self) -> None:
+    async def shutdown(self) -> None:
         task = self._task
         self._task = None
         self._codes = ()

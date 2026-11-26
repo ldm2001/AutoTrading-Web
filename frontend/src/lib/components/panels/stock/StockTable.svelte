@@ -325,9 +325,10 @@
 				<div class="rec-modal-section">
 					<h4 class="rec-modal-section-title">AI Transformer 5일 예측</h4>
 					<div class="rec-modal-pred-row">
+						<!-- 등락률 기준은 예측이 출발한 확정 종가 (현재가는 위 시그널 줄) -->
 						<div class="rec-modal-pred-item">
-							<span class="rec-modal-pred-label">현재가</span>
-							<span class="rec-modal-pred-val">{won(p.current_price)}원</span>
+							<span class="rec-modal-pred-label">기준 종가{p.base_date ? ` (${p.base_date})` : ''}</span>
+							<span class="rec-modal-pred-val">{won(p.base_close)}원</span>
 						</div>
 						<span class="rec-modal-pred-arrow">→</span>
 						<div class="rec-modal-pred-item">

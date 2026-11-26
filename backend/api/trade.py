@@ -7,7 +7,7 @@ from schema import OrderRequest
 from service.trading.bot import bot
 from service.kis import kis
 from service.trading.records import order_log, trade_log
-from service.trading.watchlist import load as load_watchlist, save as save_watchlist
+from service.trading.watchlist import current as watchcodes, record as watchrec
 
 router = APIRouter(prefix="/api/trading")
 
@@ -17,7 +17,7 @@ class WatchlistBody(BaseModel):
 # 워치리스트 조회
 @router.get("/watchlist")
 async def watchlist(_key: str = Depends(guard)):
-    return {"codes": load_watchlist()}
+    return {"codes": watchcodes()}
 
 # 워치리스트 수정
 @router.put("/watchlist")
@@ -37,7 +37,7 @@ async def watchput(body: WatchlistBody, _key: str = Depends(guard)):
         codes.append(code)
         if len(codes) > 100:
             raise HTTPException(422, "워치리스트는 최대 100개까지 가능합니다")
-    save_watchlist(codes)
+    watchrec(codes)
     return {"codes": codes, "count": len(codes)}
 
 # 보유 종목 + 평가금액 + 예수금 조회
@@ -65,19 +65,19 @@ async def balance(_key: str = Depends(guard)):
 # 자동매매 봇 시작
 @router.post("/bot/start")
 @limiter.limit("3/minute")
-async def start(request: Request, _key: str = Depends(guard)):
+async def boot(request: Request, _key: str = Depends(guard)):
     if bot.running:
         raise HTTPException(409, "Bot is already running")
-    await bot.start()
+    await bot.boot()
     return {"status": "started"}
 
 # 자동매매 봇 중지
 @router.post("/bot/stop")
 @limiter.limit("3/minute")
-async def stop(request: Request, _key: str = Depends(guard)):
+async def shutdown(request: Request, _key: str = Depends(guard)):
     if not bot.running:
         raise HTTPException(409, "Bot is not running")
-    await bot.stop()
+    await bot.shutdown()
     return {"status": "stopped"}
 
 # 봇 실행 상태 + 보유 종목 + 오늘 거래 내역
@@ -88,18 +88,18 @@ async def status(_key: str = Depends(guard)):
 # 시장가 매수 주문
 @router.post("/buy")
 @limiter.limit("5/minute")
-async def buy(request: Request, order: OrderRequest, _key: str = Depends(guard)):
+async def purchase(request: Request, order: OrderRequest, _key: str = Depends(guard)):
     try:
-        return await kis.buy(order.code, order.qty)
+        return await kis.purchase(order.code, order.qty)
     except Exception:
         raise HTTPException(502, "주문 처리에 실패했습니다")
 
 # 시장가 매도 주문
 @router.post("/sell")
 @limiter.limit("5/minute")
-async def sell(request: Request, order: OrderRequest, _key: str = Depends(guard)):
+async def sale(request: Request, order: OrderRequest, _key: str = Depends(guard)):
     try:
-        return await kis.sell(order.code, order.qty)
+        return await kis.sale(order.code, order.qty)
     except Exception:
         raise HTTPException(502, "주문 처리에 실패했습니다")
 

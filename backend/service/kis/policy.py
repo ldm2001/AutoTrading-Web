@@ -24,7 +24,7 @@ class Policy:
         return value if value is not None else None
 
     # 마지막 성공 값을 저장
-    def keep(self, key: str, value: T) -> T:
+    def lastgood(self, key: str, value: T) -> T:
         self._last[key] = value
         return value
 
@@ -44,7 +44,7 @@ class Policy:
         for turn in range(tries + 1):
             try:
                 value = await slot()
-                return self.keep(key, value)
+                return self.lastgood(key, value)
             except Exception as err:
                 err_last = err
                 code = None

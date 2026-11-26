@@ -17,12 +17,12 @@ from service.trading.bot import bot
 
 
 # guard 직접 호출용 요청 스텁
-class _Req:
+class ReqStub:
     client = None
 
 
-# bot.start 대체 no-op (실제 태스크 기동 방지)
-async def _noop_start() -> None:
+# bot.boot 대체 no-op (실제 태스크 기동 방지)
+async def noop() -> None:
     return None
 
 
@@ -31,19 +31,19 @@ class RateLimitAuthTest(unittest.TestCase):
     # api_key/bot 상태 보존 후 start를 no-op으로 교체
     def setUp(self) -> None:
         self._api_key = settings.api_key
-        self._bot_start = bot.start
+        self._bot_start = bot.boot
         self._bot_running = bot.running
-        bot.start = _noop_start
+        bot.boot = noop
         bot.running = False
 
     # 교체했던 전역/인스턴스 상태 복원
     def tearDown(self) -> None:
         settings.api_key = self._api_key
-        bot.start = self._bot_start
+        bot.boot = self._bot_start
         bot.running = self._bot_running
 
     # T6 — 레이트리밋 초과 시 500이 아닌 429 (app.state.limiter 배선 검증)
-    def test_t6(self):
+    def testt6(self):
         settings.api_key = "testkey"
         app = main.appfactory()
         client = TestClient(app, raise_server_exceptions=False)
@@ -58,7 +58,7 @@ class RateLimitAuthTest(unittest.TestCase):
         self.assertNotIn(500, statuses)
 
     # T7 — api_key 미설정 시 매매 라우터 미등록(404) + health 플래그 + guard 503
-    def test_t7(self):
+    def testt7(self):
         settings.api_key = ""
         app = main.appfactory()
         client = TestClient(app, raise_server_exceptions=False)
@@ -67,11 +67,11 @@ class RateLimitAuthTest(unittest.TestCase):
         self.assertFalse(client.get("/api/health").json()["trading_api"])
 
         with self.assertRaises(HTTPException) as raised:
-            asyncio.run(guard(_Req(), None))
+            asyncio.run(guard(ReqStub(), None))
         self.assertEqual(raised.exception.status_code, 503)
 
     # T8 — csrfok: Origin 부재 시 X-API-Key 헤더 필수 (값 검증은 guard 담당)
-    def test_t8(self):
+    def testt8(self):
         self.assertFalse(csrfok(None, None))
         self.assertTrue(csrfok(None, "any-key"))
         self.assertTrue(csrfok("http://127.0.0.1:5173", None))
@@ -86,8 +86,8 @@ class RateLimitAuthTest(unittest.TestCase):
         self.assertEqual(blocked.status_code, 403)
 
         # 키 헤더 有 → 미들웨어 통과, 라우트 도달 (200)
-        saved = trade_module.save_watchlist
-        trade_module.save_watchlist = lambda codes: None
+        saved = trade_module.watchrec
+        trade_module.watchrec = lambda codes: None
         try:
             reached = client.put(
                 "/api/trading/watchlist",
@@ -95,7 +95,7 @@ class RateLimitAuthTest(unittest.TestCase):
                 headers={"X-API-Key": "testkey"},
             )
         finally:
-            trade_module.save_watchlist = saved
+            trade_module.watchrec = saved
         self.assertNotEqual(reached.status_code, 403)
         self.assertEqual(reached.status_code, 200)
 

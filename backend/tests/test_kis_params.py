@@ -24,7 +24,7 @@ _DAYS = {"output": [
 
 
 # TR별 요청 파라미터를 기록하는 HTTP 클라이언트 스텁
-class _Client:
+class ClientStub:
     def __init__(self) -> None:
         self.params: dict[str, dict] = {}
 
@@ -35,11 +35,11 @@ class _Client:
 
 
 # 세션/헤더만 흉내내는 인증 스텁
-class _Auth:
-    def __init__(self, client: _Client) -> None:
+class AuthStub:
+    def __init__(self, client: ClientStub) -> None:
         self.client = client
 
-    async def ready(self) -> _Client:
+    async def ready(self) -> ClientStub:
         return self.client
 
     def header(self, tr_id: str) -> dict:
@@ -47,27 +47,27 @@ class _Auth:
 
 
 # 항상 미스인 캐시 스텁 — 매 호출이 실제 요청을 거치게
-class _Cache:
-    def get(self, key: str):
+class CacheStub:
+    def lookup(self, key: str):
         return None
 
-    def set(self, key: str, value, ttl: float) -> None:
+    def memo(self, key: str, value, ttl: float) -> None:
         pass
 
 
 # KIS TR 요청 파라미터 — 같은 이름의 파라미터가 TR마다 의미가 달라 값 복사로 깨지기 쉬움
 class KisParamsTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.client = _Client()
-        self.market = Market(_Auth(self.client), _Cache(), Policy())
+        self.client = ClientStub()
+        self.market = Market(AuthStub(self.client), CacheStub(), Policy())
 
     # FHKST03010100은 0=수정주가·1=원주가 — "1"이면 액면분할·증자 이전 구간이 원주가로 남아 지표가 왜곡
-    async def test_daily_requests_adjusted_price(self):
+    async def testdailyadj(self):
         await self.market.daily("005930")
         self.assertEqual(self.client.params["FHKST03010100"]["FID_ORG_ADJ_PRC"], "0")
 
     # FHKST01010400은 반대로 1=수정주가반영 — daily와 값을 맞춘다고 "0"으로 바꾸면 실패
-    async def test_target_requests_adjusted_price(self):
+    async def testtargetadj(self):
         await self.market.target("005930")
         self.assertEqual(self.client.params["FHKST01010400"]["fid_org_adj_prc"], "1")
 

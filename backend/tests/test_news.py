@@ -22,7 +22,7 @@ _BLOCKED_HTML = "<html><body>blocked</body></html>"
 
 
 # 고정 HTML을 돌려주는 httpx.AsyncClient 스텁
-class _Client:
+class ClientStub:
     html = ""
     boom = False
 
@@ -39,57 +39,57 @@ class _Client:
         if type(self).boom:
             raise RuntimeError("down")
 
-        class _Resp:
+        class RespStub:
             text = type(self).html
 
             def raise_for_status(self):
                 return None
 
-        return _Resp()
+        return RespStub()
 
 
 # 인메모리 캐시 강제 + 요청 간격 초기화 후 headlines 실행
-def fetch(code: str):
+def newsrows(code: str):
     news_module._cache._redis = None
     news_module._last_request = 0
-    with mock.patch.object(news_module.httpx, "AsyncClient", _Client):
+    with mock.patch.object(news_module.httpx, "AsyncClient", ClientStub):
         return asyncio.run(news_module.headlines(code))
 
 
 class HeadlinesTest(unittest.TestCase):
     def setUp(self):
         news_module._cache._local.clear()
-        _Client.boom = False
+        ClientStub.boom = False
 
     # 정상 파싱은 기사 반환 + 기본 TTL 캐시
-    def test_parse_rows(self):
-        _Client.html = _ROWS_HTML
-        articles = fetch("005930")
+    def testrows(self):
+        ClientStub.html = _ROWS_HTML
+        articles = newsrows("005930")
         self.assertEqual(articles[0]["title"], "첫 기사")
         expires_at, _ = news_module._cache._local["news:005930:10"]
         self.assertGreater(expires_at - time.time(), news_module._TTL_EMPTY)
 
     # 테이블은 있고 기사만 없으면 정상 빈 결과로 기본 TTL 캐시 (경고 없음)
-    def test_empty_table_normal(self):
-        _Client.html = _EMPTY_TABLE_HTML
-        articles = fetch("068270")
+    def testemptytable(self):
+        ClientStub.html = _EMPTY_TABLE_HTML
+        articles = newsrows("068270")
         self.assertEqual(articles, [])
         expires_at, _ = news_module._cache._local["news:068270:10"]
         self.assertGreater(expires_at - time.time(), news_module._TTL_EMPTY)
 
     # 목록 테이블 부재는 구조 변경/차단 의심 — 경고 + 짧은 TTL
-    def test_structure_missing(self):
-        _Client.html = _BLOCKED_HTML
+    def testnostructure(self):
+        ClientStub.html = _BLOCKED_HTML
         with self.assertLogs(news_module.logger, level="WARNING"):
-            articles = fetch("000660")
+            articles = newsrows("000660")
         self.assertEqual(articles, [])
         expires_at, _ = news_module._cache._local["news:000660:10"]
         self.assertLessEqual(expires_at - time.time(), news_module._TTL_EMPTY)
 
     # HTTP 실패는 캐시 없이 빈 목록
-    def test_fetch_error(self):
-        _Client.boom = True
-        self.assertEqual(fetch("035420"), [])
+    def testfault(self):
+        ClientStub.boom = True
+        self.assertEqual(newsrows("035420"), [])
         self.assertNotIn("news:035420:10", news_module._cache._local)
 
 

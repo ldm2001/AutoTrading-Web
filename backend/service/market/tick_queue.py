@@ -63,7 +63,7 @@ class TickQueue:
             return False
 
     # producer: WebSocket 수신부에서 호출 — put만 하고 즉시 반환
-    async def push(self, code: str, price: int, volume: int,
+    async def intake(self, code: str, price: int, volume: int,
                    ts: datetime.datetime | None = None) -> None:
         tick = {
             "code": code,
@@ -100,7 +100,7 @@ class TickQueue:
         self._handlers.append(handler)
 
     # consumer 루프 시작
-    async def start(self) -> None:
+    async def boot(self) -> None:
         if self._running:
             return
         self._running = True
@@ -112,7 +112,7 @@ class TickQueue:
         logger.info("TickQueue consumer started (kafka=%s)", self._use_kafka)
 
     # consumer 루프 중지
-    async def stop(self) -> None:
+    async def shutdown(self) -> None:
         self._running = False
         if self._task:
             self._task.cancel()
@@ -136,7 +136,7 @@ class TickQueue:
         logger.info("TickQueue consumer stopped")
 
     # 틱 처리 공통 로직
-    async def proc(self, tick: dict) -> None:
+    async def tickjob(self, tick: dict) -> None:
         code = tick["code"]
         price = tick["price"]
         volume = tick["volume"]
@@ -151,7 +151,7 @@ class TickQueue:
         else:
             ts = datetime.datetime.now()
 
-        await store.ingest(code, price, volume, ts)
+        await store.intake(code, price, volume, ts)
         candle_ingest.labels(interval="15m").inc()
         candle_ingest.labels(interval="60m").inc()
 
@@ -163,7 +163,7 @@ class TickQueue:
             except Exception as e:
                 logger.error("Tick handler error: %s", e)
 
-        await bus.emit("tick", {"code": code, "price": price, "volume": volume})
+        await bus.event("tick", {"code": code, "price": price, "volume": volume})
 
     # Kafka consumer 루프
     async def kloop(self) -> None:
@@ -171,7 +171,7 @@ class TickQueue:
             async for msg in self._consumer:
                 if not self._running:
                     break
-                await self.proc(msg.value)
+                await self.tickjob(msg.value)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -189,7 +189,7 @@ class TickQueue:
                 except TimeoutError:
                     continue
                 tick_queue_size.set(q.qsize())
-                await self.proc(tick)
+                await self.tickjob(tick)
         except asyncio.CancelledError:
             pass
         except Exception as e:

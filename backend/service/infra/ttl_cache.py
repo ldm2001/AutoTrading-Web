@@ -51,7 +51,7 @@ class TTLCache:
         return time.time() >= self._retry_at
 
     # 실패 기록 — 한도 도달 시 쿨다운 시작, 강등 전환 시점에 1회 경고
-    def fail(self, err: Exception) -> None:
+    def fault(self, err: Exception) -> None:
         self._fails += 1
         if self._fails >= _FAIL_LIMIT:
             self._retry_at = time.time() + _RETRY_COOLDOWN
@@ -65,7 +65,7 @@ class TTLCache:
         self._fails = 0
 
     # 만료 엔트리 주기적 정리 (100회 get 마다 실행)
-    def purge(self) -> None:
+    def expiry(self) -> None:
         self._access_count += 1
         if self._access_count < 100:
             return
@@ -76,7 +76,7 @@ class TTLCache:
             del self._local[k]
 
     # 유효한 캐시만 반환
-    def get(self, key: str) -> Any | None:
+    def lookup(self, key: str) -> Any | None:
         if self.up():
             try:
                 raw = self._redis.get(f"cache:{key}")
@@ -87,9 +87,9 @@ class TTLCache:
                 cache_miss.inc()
                 return None
             except Exception as e:
-                self.fail(e)
+                self.fault(e)
 
-        self.purge()
+        self.expiry()
         entry = self._local.get(key)
         if entry is None:
             cache_miss.inc()
@@ -103,19 +103,19 @@ class TTLCache:
         return None
 
     # 값을 ttl 함께 저장
-    def set(self, key: str, value: Any, ttl: float) -> None:
+    def memo(self, key: str, value: Any, ttl: float) -> None:
         if self.up():
             try:
                 self._redis.setex(f"cache:{key}", int(max(ttl, 1)), json.dumps(value, default=str))
                 self.okay()
                 return
             except Exception as e:
-                self.fail(e)
+                self.fault(e)
 
         self._local[key] = (time.time() + ttl, value)
 
     # 접두사 기준으로 캐시를 무효화 (강등 대비 인메모리도 항상 정리)
-    def invalidate(self, *prefixes: str) -> None:
+    def eviction(self, *prefixes: str) -> None:
         if self.up():
             try:
                 for prefix in prefixes:
@@ -128,14 +128,14 @@ class TTLCache:
                             break
                 self.okay()
             except Exception as e:
-                self.fail(e)
+                self.fault(e)
 
         keys = [k for k in self._local if any(k.startswith(p) for p in prefixes)]
         for k in keys:
             del self._local[k]
 
     # 전체 캐시 정리 (강등 대비 인메모리도 항상 정리)
-    def clear(self) -> None:
+    def blank(self) -> None:
         if self.up():
             try:
                 cursor = 0
@@ -147,7 +147,7 @@ class TTLCache:
                         break
                 self.okay()
             except Exception as e:
-                self.fail(e)
+                self.fault(e)
 
         self._local.clear()
 

@@ -1,19 +1,24 @@
 # 한국 증시(KRX) 휴장일 — 매년 말 다음 해 목록 수동 갱신 (음력·대체공휴일 변동)
 import logging
-from datetime import date
+from datetime import date, datetime, time, timedelta
 
 logger = logging.getLogger(__name__)
 
-# 연도별 KRX 휴장일 (월, 일) — 주말 제외 실제 휴장일 기준 (KRX 공고 대조 2026-07-11)
+# 정규장 마감 — 이 시각부터 당일 일봉을 확정으로 봄 (predict.settled()와 같은 경계)
+CLOSE = time(15, 30)
+
+# 연도별 KRX 휴장일 (월, 일) — 주말 제외 실제 휴장일 기준 (KRX 공고 대조 2026-07-11, 6/3·7/17 보도 대조 추가 2026-11-23)
 # 2026: 신정 1/1 · 설연휴 2/16-18 · 삼일절 대체 3/2 · 근로자의날 5/1 · 어린이날 5/5
-#       석탄일 대체 5/25 · 광복절 대체 8/17 · 추석 9/24-25 · 개천절 대체 10/5
-#       한글날 10/9 · 성탄절 12/25 · 연말휴장 12/31
+#       석탄일 대체 5/25 · 지방선거 6/3 · 제헌절 7/17 · 광복절 대체 8/17 · 추석 9/24-25
+#       개천절 대체 10/5 · 한글날 10/9 · 성탄절 12/25 · 연말휴장 12/31
 _KRX_HOLIDAYS: dict[int, set[tuple[int, int]]] = {
     2026: {
         (1, 1),
         (2, 16), (2, 17), (2, 18),
         (3, 2),
         (5, 1), (5, 5), (5, 25),
+        (6, 3),      # 전국동시지방선거
+        (7, 17),     # 제헌절 (2026년 공휴일 재지정)
         (8, 17),
         (9, 24), (9, 25),
         (10, 5), (10, 9),
@@ -35,3 +40,30 @@ def mkt(d: date | None = None) -> bool:
             logger.warning(f"KRX holidays unregistered for {d.year}: weekend-only check")
         return True
     return (d.month, d.day) not in holidays
+
+
+# 휴장일 테이블 미등록 연도 — 올해, 12월이면 내년까지 (봇 기동·날짜 변경 시 경보용)
+def unregistered(today: date) -> list[int]:
+    years = [today.year] + ([today.year + 1] if today.month == 12 else [])
+    return [y for y in years if y not in _KRX_HOLIDAYS]
+
+
+# 가장 최근 확정 거래일 — 오늘이 개장일이고 15:30 이후면 오늘, 아니면 직전 개장일 (시계는 호출자가 넘김)
+def lastday(now: datetime) -> date:
+    d = now.date()
+    if mkt(d) and now.time() >= CLOSE:
+        return d
+    for _ in range(366):
+        d -= timedelta(days=1)
+        if mkt(d):
+            break
+    return d
+
+
+# 다음 개장일 — 주말·휴장일을 건너뜀
+def nextday(d: date) -> date:
+    for _ in range(366):
+        d += timedelta(days=1)
+        if mkt(d):
+            break
+    return d

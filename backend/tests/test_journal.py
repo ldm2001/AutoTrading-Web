@@ -9,7 +9,7 @@ from service.trading.journal import TradeJournal
 
 
 # 알림 스텁
-class _Notifier:
+class NotifierStub:
     def __init__(self) -> None:
         self.msgs: list[str] = []
 
@@ -20,18 +20,18 @@ class _Notifier:
 # TradeJournal — 기록/이벤트/복원
 class TradeJournalTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self._append = journal_module.trade_log_append
-        self._rows = journal_module.trade_log_rows
-        journal_module.trade_log_append = lambda _e: None
+        self._append = journal_module.traderec
+        self._rows = journal_module.traderows
+        journal_module.traderec = lambda _e: None
 
     def tearDown(self) -> None:
-        journal_module.trade_log_append = self._append
-        journal_module.trade_log_rows = self._rows
+        journal_module.traderec = self._append
+        journal_module.traderows = self._rows
 
     # rec — 로그 누적 + snap 호출 + ontrade 이벤트 + 알림
-    async def test_rec_records_and_fires(self):
+    async def testrecord(self):
         snaps = {"n": 0}
-        notifier = _Notifier()
+        notifier = NotifierStub()
         j = TradeJournal(notifier, lambda: snaps.__setitem__("n", snaps["n"] + 1))
         events: list[dict] = []
 
@@ -48,10 +48,10 @@ class TradeJournalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("매수 성공", notifier.msgs[0])
 
     # load — 파일에서 오늘 내역 복원
-    async def test_load_restores(self):
-        journal_module.trade_log_rows = lambda: [{"x": 1}]
-        j = TradeJournal(_Notifier(), lambda: None)
-        j.load()
+    async def testrecovery(self):
+        journal_module.traderows = lambda: [{"x": 1}]
+        j = TradeJournal(NotifierStub(), lambda: None)
+        j.recovery()
         self.assertEqual(j.logs, [{"x": 1}])
 
 

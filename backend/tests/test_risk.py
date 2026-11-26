@@ -15,25 +15,25 @@ async def noop(_text: str) -> None:
 
 
 # Redis 없는 캐시 스텁
-class _Cache:
+class CacheStub:
     redis = None
 
 
 # 틱 큐 스텁 — start만 노출
-class _Queue:
-    async def start(self) -> None:
+class QueueStub:
+    async def boot(self) -> None:
         return None
 
 
 # 최소 broker 스텁 (cache만 필요)
-class _Broker:
+class BrokerStub:
     def __init__(self) -> None:
-        self.cache = _Cache()
+        self.cache = CacheStub()
 
 
 # 테스트용 Bot 인스턴스 생성
-def _bot() -> Bot:
-    return Bot(_Broker(), _Queue(), {}, lambda: [])
+def botrig() -> Bot:
+    return Bot(BrokerStub(), QueueStub(), {}, lambda: [])
 
 
 # FR-01/02 — 손절 모니터링 fail-safe (예외 전파 + 연속 실패 경보, 스로틀)
@@ -47,8 +47,8 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
         riskmonitor_module.stoploss = self._stoploss
 
     # T1 — 시세 조회 3회 연속 실패 시 손절 모니터링 장애 경보 정확히 1회
-    async def test_t1(self):
-        bot = _bot()
+    async def testt1(self):
+        bot = botrig()
         captured: list[str] = []
 
         # msg 캡처
@@ -71,11 +71,11 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(alerts), 1)
         self.assertIn("삼성전자", alerts[0])
         self.assertIn("005930", alerts[0])
-        self.assertEqual(bot._sl_fails["005930"], 3)
+        self.assertEqual(bot.slfails["005930"], 3)
 
     # T2 — 실패 2회 후 성공하면 연속 실패 카운터 리셋, 경보 0회
-    async def test_t2(self):
-        bot = _bot()
+    async def testt2(self):
+        bot = botrig()
         captured: list[str] = []
 
         # msg 캡처
@@ -101,19 +101,19 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
 
         alerts = [m for m in captured if "[손절 모니터링 장애]" in m]
         self.assertEqual(len(alerts), 0)
-        self.assertNotIn("005930", bot._sl_fails)
+        self.assertNotIn("005930", bot.slfails)
 
     # T3 — riskgate는 시간창과 무관하게 동작하되 최소 2초 간격으로 스로틀
-    async def test_t3(self):
-        bot = _bot()
+    async def testt3(self):
+        bot = botrig()
         bot.bought = {"005930": {"name": "삼성전자", "qty": 1, "avg_price": 70000}}
         riskcalls = {"n": 0}
 
         # risk 호출 횟수만 집계하는 mock
-        async def fakerisk() -> None:
+        async def riskstub() -> None:
             riskcalls["n"] += 1
 
-        bot.risks.risk = fakerisk
+        bot.risks.risk = riskstub
 
         await bot.riskgate()
         self.assertEqual(riskcalls["n"], 1)
@@ -123,7 +123,7 @@ class StopLossFailsafeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(riskcalls["n"], 1)
 
         # 2초 경과 시뮬레이션 → 재호출 허용
-        bot._risk_last -= 3.0
+        bot.risklast -= 3.0
         await bot.riskgate()
         self.assertEqual(riskcalls["n"], 2)
 

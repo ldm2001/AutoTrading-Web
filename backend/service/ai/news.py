@@ -19,7 +19,7 @@ async def headlines(code: str, count: int = 10) -> list[dict]:
     global _last_request
 
     key = f"news:{code}:{count}"
-    cached = _cache.get(key)
+    cached = _cache.lookup(key)
     if cached is not None:
         return cached
 
@@ -88,8 +88,8 @@ async def headlines(code: str, count: int = 10) -> list[dict]:
     # 기사 0건 + 목록 테이블 부재는 페이지 구조 변경/차단 의심 — 경고 후 짧게 캐시
     if not articles and soup.select_one("table.type5") is None:
         logger.warning(f"News parse empty for {code}: page structure changed or blocked (html {len(resp.text)}b)")
-        _cache.set(key, articles, _TTL_EMPTY)
+        _cache.memo(key, articles, _TTL_EMPTY)
         return articles
 
-    _cache.set(key, articles, _TTL)
+    _cache.memo(key, articles, _TTL)
     return articles

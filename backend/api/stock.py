@@ -3,9 +3,10 @@ import asyncio
 import time
 import logging
 from fastapi import APIRouter, HTTPException
+from config import settings
 from service.kis import kis
-from service.trading.strategy import evaluate
-from service.ai.predict import predict_stock, predictor
+from service.trading.strategy import verdict
+from service.ai.predict import forecast, predictor
 from service.market.stock_universe import ALL_STOCKS, CODES, NAMES, search
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ _generation = 0
 _stage1_job: asyncio.Task | None = None
 # 2단계
 _stage2_job: asyncio.Task | None = None
+# 2단계를 시작한 마지막 세대 — 세대마다 한 번만 시작 (통째로 실패한 세대를 재조회마다 다시 돌리지 않음)
+_stage2_gen = 0
 
 # ETF 제외 개별 종목 (추천 스캔 대상)
 _SCAN_CODES = [
@@ -39,33 +42,39 @@ def live(entry):
     return None
 
 # 만료 여부와 관계없이 마지막 값을 반환
-def peek(entry):
+def cacheview(entry):
     if entry is None:
         return None
     return entry[1]
 
-# 예측 결과를 추천 요약으로 변환
+# 예측 결과를 추천 요약으로 변환 — 등락률은 예측 기준가(확정 일봉 마지막 종가) 대비
 def brief(current_price: int, pred: dict | None) -> dict | None:
     if not pred:
         return None
     preds = pred.get("predictions", [])
-    if not preds:
+    base = pred.get("base_close")
+    # 기준가 없는 옛 형식은 현재가로 비교하지 않음 (Scorer.pred와 같은 규칙)
+    if not preds or not base:
         return None
     predicted_5d = preds[-1]["close"]
-    change_pct = round((predicted_5d - current_price) / current_price * 100, 2) if current_price else 0
+    change_pct = round((predicted_5d - base) / base * 100, 2)
     return {
         "current_price": current_price,
         "predicted_5d": predicted_5d,
         "change_pct": change_pct,
         "trend": "상승" if change_pct > 1 else ("하락" if change_pct < -1 else "보합"),
+        "base_close": base,
+        "base_date": pred.get("base_date"),
     }
 
-# 추천 응답 형식 통일
+# 추천 응답 형식 통일 — loading·refreshing은 프런트(recommend.ts)가 읽는 이름 (refreshing이면 5초 뒤 재조회)
 def pack(items: list[dict], *, stage: str, enhancing: bool) -> dict:
     return {
         "items": items,
         "stage": stage,
         "enhancing": enhancing,
+        "loading": False,
+        "refreshing": enhancing,
     }
 
 # 진행 중 작업 여부 확인
@@ -97,7 +106,7 @@ async def hits(q: str):
 
 # 종목명/코드 검색 후 현재가 조회
 @router.get("/search/{query}/price")
-async def find(query: str):
+async def lookup(query: str):
     code = query
     if not query.isdigit():
         code = CODES.get(query, "")
@@ -123,8 +132,9 @@ async def screen() -> dict:
         async def slot(code: str):
             async with sem:
                 try:
+                    # 점수는 예측 없이 (검증 전 Direction 0점) — 캐시 예측은 배지 표시 전용
                     cached_pred = predictor.cached(code)
-                    result = await evaluate(code, prediction=cached_pred, fast=True)
+                    result = await verdict(code, prediction=None, fast=True)
                     return {
                         "code":       code,
                         "name":       NAMES.get(code, code),
@@ -158,7 +168,7 @@ async def screen() -> dict:
         if _stage1_job is task:
             _stage1_job = None
 
-# 2단계 백그라운드 — 트랜스포머 예측으로 캐시 갱신
+# 2단계 백그라운드 — 전체 평가로 캐시 갱신 (예측 학습은 use_prediction일 때만)
 async def stage2(candidates: list[dict], generation: int) -> None:
     global _stage2_cache, _stage2_job
     task = asyncio.current_task()
@@ -170,8 +180,13 @@ async def stage2(candidates: list[dict], generation: int) -> None:
             async with pred_sem:
                 code = item["code"]
                 try:
-                    pred  = await predict_stock(code)
-                    result = await evaluate(code, prediction=pred, fast=False)
+                    if settings.use_prediction:
+                        pred  = await forecast(code)
+                        result = await verdict(code, prediction=pred, fast=False)
+                    else:
+                        # 플래그 꺼짐 — 학습 없이 보강, 캐시 예측은 배지 표시 전용
+                        pred  = predictor.cached(code)
+                        result = await verdict(code, prediction=None, fast=False)
                     item["prediction"] = brief(result["price"], pred)
                     item["score"]   = result["score"]
                     item["signal"]  = result["signal"]
@@ -198,7 +213,7 @@ async def stage2(candidates: list[dict], generation: int) -> None:
 # AI 멀티팩터 + 트랜스포머 2단계 추천
 @router.get("/recommend")
 async def recommend():
-    global _stage1_job, _stage2_job
+    global _stage1_job, _stage2_job, _stage2_gen
 
     enhanced = live(_stage2_cache)
     if enhanced is not None:
@@ -207,10 +222,15 @@ async def recommend():
     stage1 = live(_stage1_cache)
     # 갱신 중이면 마지막 1단계 결과를 계속 유지
     if stage1 is None and (busy(_stage1_job) or busy(_stage2_job)):
-        stage1 = peek(_stage1_cache)
+        stage1 = cacheview(_stage1_cache)
     if stage1 is not None:
-        should_enhance = bool(stage1["candidates"]) and not busy(_stage2_job)
+        should_enhance = (
+            bool(stage1["candidates"])
+            and not busy(_stage2_job)
+            and stage1["generation"] != _stage2_gen
+        )
         if should_enhance:
+            _stage2_gen = stage1["generation"]
             _stage2_job = asyncio.create_task(stage2(
                 [dict(item) for item in stage1["candidates"]],
                 stage1["generation"],
@@ -227,7 +247,8 @@ async def recommend():
 
     # 2단계: 백그라운드로 Transformer 예측 보강 (상위 일부)
     candidates = [dict(item) for item in stage1["candidates"]]
-    if candidates and not busy(_stage2_job):
+    if candidates and not busy(_stage2_job) and stage1["generation"] != _stage2_gen:
+        _stage2_gen = stage1["generation"]
         _stage2_job = asyncio.create_task(stage2(candidates, stage1["generation"]))
 
     return pack(stage1["items"], stage="screened", enhancing=busy(_stage2_job))
@@ -240,7 +261,7 @@ async def sectorflow():
         codes = list(NAMES.keys())[:80]
         sem = asyncio.Semaphore(15)
 
-        async def fetch(code: str):
+        async def quoterow(code: str):
             async with sem:
                 try:
                     p = await kis.price(code)
@@ -248,7 +269,7 @@ async def sectorflow():
                 except Exception:
                     return None
 
-        results = await asyncio.gather(*[fetch(c) for c in codes])
+        results = await asyncio.gather(*[quoterow(c) for c in codes])
         valid = [r for r in results if r]
 
         sectors: dict[str, dict] = {}

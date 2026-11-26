@@ -54,7 +54,7 @@ class GeminiClient:
         self, indicators: dict, news: list[dict], stock_info: dict
     ) -> dict | None:
         cache_key = f"signal:{stock_info.get('code', '')}"
-        cached = _cache.get(cache_key)
+        cached = _cache.lookup(cache_key)
         if cached is not None:
             return cached
 
@@ -86,13 +86,13 @@ class GeminiClient:
 
         result = await self.js(prompt)
         if result:
-            _cache.set(cache_key, result, 60)
+            _cache.memo(cache_key, result, 60)
         return result
 
     # 뉴스 감성 분석 — 긍정/중립/부정 분류 + 전체 점수 반환 (5분 캐시)
     async def sentiment(self, news: list[dict], stock_name: str) -> dict | None:
         cache_key = f"sentiment:{stock_name}"
-        cached = _cache.get(cache_key)
+        cached = _cache.lookup(cache_key)
         if cached is not None:
             return cached
 
@@ -123,7 +123,7 @@ class GeminiClient:
 
         result = await self.js(prompt)
         if result:
-            _cache.set(cache_key, result, 300)
+            _cache.memo(cache_key, result, 300)
         return result
 
     # 일일 마켓 리포트 마크다운 생성 (1시간 캐시)
@@ -132,7 +132,7 @@ class GeminiClient:
         *, today_str: str = "", market_open: bool = True
     ) -> str | None:
         cache_key = "daily_report"
-        cached = _cache.get(cache_key)
+        cached = _cache.lookup(cache_key)
         if cached is not None:
             return cached
 
@@ -186,7 +186,7 @@ class GeminiClient:
 
         result = await self.txt(prompt)
         if result:
-            _cache.set(cache_key, result, 3600)
+            _cache.memo(cache_key, result, 3600)
         return result
 
 # 모듈 레벨 싱글턴 인스턴스

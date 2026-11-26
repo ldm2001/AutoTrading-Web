@@ -29,7 +29,7 @@ class Market:
     # 현재가 요약을 조회 — stale=False면 장애 시 마지막 성공 값 대신 예외 전파
     async def price(self, code: str, stale: bool = True) -> dict:
         key = f"price:{code}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -53,7 +53,7 @@ class Market:
                 "market_cap": out.get("hts_avls", "0"),
                 "market": out.get("rprs_mrkt_kor_name", ""),
             }
-            self.cache.set(key, result, self.TTL_PRICE)
+            self.cache.memo(key, result, self.TTL_PRICE)
             return result
 
         return await self.policy.safe(key, slot, mark="price", stale=stale)
@@ -65,7 +65,7 @@ class Market:
     # 5호가를 조회
     async def orderbook(self, code: str) -> dict:
         key = f"ob:{code}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -94,13 +94,13 @@ class Market:
             return {"asks": asks, "bids": bids}
 
         result = await self.policy.safe(key, slot, mark="orderbook", stale=True)
-        self.cache.set(key, result, self.TTL_OB)
+        self.cache.memo(key, result, self.TTL_OB)
         return result
 
     # 일봉 캔들을 조회
     async def daily(self, code: str, count: int = 60) -> list[dict]:
         key = f"daily:{code}:{count}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -138,13 +138,13 @@ class Market:
             return candles
 
         candles = await self.policy.safe(key, slot, mark="daily", stale=True)
-        self.cache.set(key, candles, self.TTL_DAILY)
+        self.cache.memo(key, candles, self.TTL_DAILY)
         return candles
 
     # 1분봉 3구간 수집 → 15분 단위 OHLCV 캔들로 집계
     async def c15(self, code: str) -> list[dict]:
         key = f"candles_15m:{code}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -208,7 +208,7 @@ class Market:
             return sorted(buckets.values(), key=lambda item: item["time"])
 
         candles = await self.policy.safe(key, slot, mark="candles_15m", stale=True)
-        self.cache.set(key, candles, self.TTL_15M)
+        self.cache.memo(key, candles, self.TTL_15M)
         return candles
 
     # 여러 종목 현재가를 병렬 조회
@@ -224,7 +224,7 @@ class Market:
     # 변동성 돌파 목표가를 계산
     async def target(self, code: str) -> float:
         key = f"target:{code}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -247,13 +247,13 @@ class Market:
             return int(out[0]["stck_oprc"]) + (int(out[1]["stck_hgpr"]) - int(out[1]["stck_lwpr"])) * 0.5
 
         result = await self.policy.safe(key, slot, mark="target", stale=True)
-        self.cache.set(key, result, self.TTL_TARGET)
+        self.cache.memo(key, result, self.TTL_TARGET)
         return result
 
     # 단일 지수 시세를 조회 — stale=False면 장애 시 마지막 성공 값 대신 예외 전파
     async def index(self, code: str, stale: bool = True) -> dict:
         key = f"index:{code}"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -272,7 +272,7 @@ class Market:
                 "change": float(out.get("bstp_nmix_prdy_vrss", "0")),
                 "change_percent": float(out.get("bstp_nmix_prdy_ctrt", "0")),
             }
-            self.cache.set(key, result, self.TTL_INDEX)
+            self.cache.memo(key, result, self.TTL_INDEX)
             return result
 
         return await self.policy.safe(key, slot, mark="index", stale=stale)
@@ -286,13 +286,13 @@ class Market:
             try:
                 data = await self.index(api_code, stale=stale)
                 entry = {"code": name, "name": label, **data}
-                self.cache.set(f"idx_last:{name}", entry, 3600)
+                self.cache.memo(f"idx_last:{name}", entry, 3600)
                 return entry
             except Exception as e:
                 logger.error("Index error (%s): %s", name, e)
                 if not stale:
                     raise
-                return self.cache.get(f"idx_last:{name}")
+                return self.cache.lookup(f"idx_last:{name}")
 
         result = await asyncio.gather(*[one(name, api_code, label) for name, (api_code, label) in items])
         return [item for item in result if item is not None]

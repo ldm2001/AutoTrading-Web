@@ -21,15 +21,15 @@ class Auth:
         self._policy = policy or Policy()
 
     # HTTP 세션을 열고 토큰을 받음
-    async def open(self) -> None:
+    async def boot(self) -> None:
         self._client = httpx.AsyncClient(
             base_url=settings.url_base,
             timeout=httpx.Timeout(10.0),
         )
-        await self.refresh()
+        await self.renewal()
 
     # HTTP 세션 종료
-    async def close(self) -> None:
+    async def shutdown(self) -> None:
         if self._client:
             await self._client.aclose()
             self._client = None
@@ -37,7 +37,7 @@ class Auth:
         self._approval_exp = 0.0
 
     # 접근 토큰을 새로 받음
-    async def refresh(self) -> None:
+    async def renewal(self) -> None:
         client = self._client
         if client is None:
             raise RuntimeError("KIS client is not started")
@@ -100,7 +100,7 @@ class Auth:
         if client is None:
             raise RuntimeError("KIS client is not started")
         if time.time() >= self._exp:
-            await self.refresh()
+            await self.renewal()
         return client
 
     # TR ID 기준 공통 헤더 생성

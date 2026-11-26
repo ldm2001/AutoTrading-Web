@@ -136,12 +136,13 @@
 					: 'rgba(156, 163, 175, 0.25)',
 		})) as any);
 
-		// AI 예측 오버레이 (초록)
+		// AI 예측 오버레이 (초록) — 예측 종가 선, 시작점은 학습에 쓴 확정 일봉의 마지막 종가(base_date, base_close)
+		// 차트 마지막 봉에서 시작하지 않음 — 장중에는 형성 중 당일봉이 첫 예측일과 같은 날이라 시각이 겹침
 		const pred = $prediction;
 		if (pred && pred.predictions.length > 0 && pred.code === $selectedStock) {
-			const lastCandle = candles[candles.length - 1];
+			const start = pred.base_date && pred.base_close ? [{ time: pred.base_date, value: pred.base_close }] : [];
 			const lineData = [
-				{ time: lastCandle.date, value: lastCandle.close },
+				...start,
 				...pred.predictions.map((p) => ({ time: p.date, value: p.close })),
 			];
 			predLine = chart.addSeries(LineSeries, {

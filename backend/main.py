@@ -14,7 +14,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 from config import settings
-from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, price_loop
+from api import stock_router, trade_router, ws_router, ai_router, predict_router, backtest_router, manager, priceloop
 from api.security import ALLOWED_ORIGINS, MUTATING_METHODS, csrfok
 from api.limiter import limiter
 from service.trading.bot import bot
@@ -26,14 +26,14 @@ from service.market.sector import sectors
 from service.market.stock_universe import listing
 from service.market.tick_queue import tick_q
 from service.infra.event_bus import bus
-from service.infra.logging import setup as setup_logging
+from service.infra.logging import setup as logsetup
 
 # 구조화 로깅 초기화
-setup_logging()
+logsetup()
 logger = logging.getLogger(__name__)
 
 # Scorer broker 주입 (합성 루트 — 서비스 로케이터 제거)
-scorer.bind(kis)
+scorer.binding(kis)
 
 # 앱 시작/종료 시 KIS 클라이언트 및 봇 라이프사이클 관리
 @asynccontextmanager
@@ -46,27 +46,27 @@ async def lifespan(app: FastAPI):
     logger.info("Starting KIS API")
     kis_ok = False
     try:
-        await kis.start()
+        await kis.boot()
         kis_ok = True
         logger.info("KIS API ready")
     except Exception as e:
         logger.warning("KIS API 인증 실패 (장외 시간 또는 키 문제) — 서버는 기동합니다: %s", e)
 
     if kis_ok:
-        await tick_q.start()
+        await tick_q.boot()
 
     # 이벤트 버스 시작 (Redis Pub/Sub 연결)
     if kis.cache.redis is not None:
-        bus.bind(kis.cache.redis)
-    await bus.start()
+        bus.binding(kis.cache.redis)
+    await bus.boot()
 
     # Discord 알림 큐 기동 (주문 경로 비차단)
-    await discord.start()
+    await discord.boot()
 
     bot.onmessage = manager.message
     bot.ontrade = manager.trade
 
-    task = asyncio.create_task(price_loop()) if kis_ok else None
+    task = asyncio.create_task(priceloop()) if kis_ok else None
     yield
 
     if task:
@@ -76,15 +76,15 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     if bot.running:
-        await bot.stop()
+        await bot.shutdown()
     # 봇 종료 메시지까지 drain 후 큐 정리
-    await discord.close()
-    await bus.stop()
+    await discord.shutdown()
+    await bus.shutdown()
     await price_sync.eod()
     if kis_ok:
-        await kis.wclose()
-        await tick_q.stop()
-        await kis.stop()
+        await kis.wshutdown()
+        await tick_q.shutdown()
+        await kis.shutdown()
     logger.info("Shutdown complete")
 
 # 하위 호환 테스트/설정을 위한 별칭

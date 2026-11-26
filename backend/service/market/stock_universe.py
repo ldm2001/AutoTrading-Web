@@ -122,7 +122,7 @@ INDICES: dict[str, tuple[str, str]] = {
 }
 
 # 최근 영업일 추적 (주말/장기 공휴일 자동 회피)
-def _day0() -> str | None:
+def day0() -> str | None:
     from pykrx import stock
     # 당일은 KRX 공시 전일 수 있어 전일부터 탐색
     d = datetime.now() - timedelta(days=1)
@@ -137,7 +137,7 @@ def _day0() -> str | None:
     return None
 
 # KRX(pykrx)로 전체 종목 + 섹터 한 번에 적재
-def _krx(ds: str) -> int:
+def krx(ds: str) -> int:
     from pykrx import stock
     count = 0
     for market in ("KOSPI", "KOSDAQ"):
@@ -162,7 +162,7 @@ def _krx(ds: str) -> int:
 
 
 # 네이버 금융 API로 전체 종목 가져오기
-def _naver() -> int:
+def naver() -> int:
     count = 0
     seen: set[str] = set()
     page = 1
@@ -186,13 +186,13 @@ def _naver() -> int:
 
     # 시장 구분: 네이버 개별 종목 API로 보정 (상위 종목만)
     # 나머지는 빈 문자열 → 프론트에서 표시 안 함
-    _mkts(list(ALL_STOCKS.keys()))
+    mkts(list(ALL_STOCKS.keys()))
     return count
 
 # 시장 구분 보정 — KRX로 시도 후 캐시 파일에 저장
 _MARKET_CACHE = Path(__file__).parent.parent / "trades" / "market_cache.json"
 
-def _mkts(codes: list[str]) -> None:
+def mkts(codes: list[str]) -> None:
     # 1차: 캐시 파일에서 복원
     if _MARKET_CACHE.exists():
         try:
@@ -241,9 +241,9 @@ def listing(*, force: bool = False) -> None:
     if _loaded and not force:
         return
 
-    # 무거운 네트워크 IO(_day0)는 락 밖에서 — 락 점유 시간 단축
-    # 동시 호출 시 _day0가 중복 실행될 수 있으나 read-only이므로 안전
-    ds = _day0()
+    # 무거운 네트워크 IO(day0)는 락 밖에서 — 락 점유 시간 단축
+    # 동시 호출 시 day0가 중복 실행될 수 있으나 read-only이므로 안전
+    ds = day0()
 
     with _lock:
         # double-checked locking: 다른 스레드가 이미 완료했을 수 있음
@@ -253,7 +253,7 @@ def listing(*, force: bool = False) -> None:
         # 1차: KRX(pykrx) — 종목명 + 업종 동시 수집
         if ds:
             try:
-                count = _krx(ds)
+                count = krx(ds)
                 if count > 100:
                     logger.info("Loaded %s stocks via KRX (pykrx) with sectors", count)
                     _loaded = True
@@ -266,7 +266,7 @@ def listing(*, force: bool = False) -> None:
 
         # 2차: 네이버 금융
         try:
-            count = _naver()
+            count = naver()
             if count > 0:
                 logger.info("Loaded %s stocks via Naver API (no sector)", count)
                 _loaded = True

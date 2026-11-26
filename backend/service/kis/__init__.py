@@ -26,16 +26,16 @@ class KIS:
         self.policy = Policy()
         self.auth = Auth(self.policy)
         self.market = Market(self.auth, self.cache, self.policy)
-        self.trade = Trade(self.auth, self.cache, self.policy, audit=order_log.append)
+        self.trade = Trade(self.auth, self.cache, self.policy, audit=order_log.record)
         self.ws = KISWS(self.auth, price_sync)
 
     # KIS 세션 오픈
-    async def start(self) -> None:
-        await self.auth.open()
+    async def boot(self) -> None:
+        await self.auth.boot()
 
     # KIS 세션을 닫음
-    async def stop(self) -> None:
-        await self.auth.close()
+    async def shutdown(self) -> None:
+        await self.auth.shutdown()
 
     # 현재가 요약을 조회
     async def price(self, code: str) -> dict:
@@ -82,20 +82,20 @@ class KIS:
         return await self.trade.cash()
 
     # 시장가 매수를 요청
-    async def buy(self, code: str, qty: int) -> dict:
-        return await self.trade.buy(code, qty)
+    async def purchase(self, code: str, qty: int) -> dict:
+        return await self.trade.purchase(code, qty)
 
     # 시장가 매도를 요청
-    async def sell(self, code: str, qty: int) -> dict:
-        return await self.trade.sell(code, qty)
+    async def sale(self, code: str, qty: int) -> dict:
+        return await self.trade.sale(code, qty)
 
     # 실시간 체결 구독을 맞춤
-    async def wsync(self, codes: list[str]) -> None:
-        await self.ws.sync(codes)
+    async def wsubs(self, codes: list[str]) -> None:
+        await self.ws.subs(codes)
 
     # 실시간 체결 연결을 닫음
-    async def wclose(self) -> None:
-        await self.ws.close()
+    async def wshutdown(self) -> None:
+        await self.ws.shutdown()
 
     # 실시간 최신 시세를 seed 한다
     def wseed(self, items: list[dict]) -> None:

@@ -31,7 +31,7 @@ class PriceSync:
         volume: int,
         ts: datetime.datetime | None = None,
     ) -> None:
-        await self.queue.push(code, price, volume, ts)
+        await self.queue.intake(code, price, volume, ts)
 
     # 폴링 시세 → 거래량 차분 계산 후 pseudo-tick 생성
     async def snap(
@@ -63,7 +63,7 @@ class PriceSync:
         date_str = date_str or datetime.date.today().isoformat()
         if self._last_flushed_day == date_str:
             return 0
-        saved = await self.candles.flush(date_str)
+        saved = await self.candles.checkpoint(date_str)
         self._last_flushed_day = date_str
         if saved:
             logger.info("Flushed candle store for %s (%s files)", date_str, saved)

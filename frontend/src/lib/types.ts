@@ -134,8 +134,12 @@ export interface RecommendFactor {
 export interface RecommendPrediction {
 	current_price: number;
 	predicted_5d: number;
+	// 예측 기준가(base_close) 대비 등락률 — 현재가 대비 아님
 	change_pct: number;
 	trend: string;
+	// 예측 기준 — 학습에 쓴 확정 일봉의 마지막 종가와 날짜(YYYY-MM-DD)
+	base_close: number;
+	base_date: string | null;
 }
 
 // 추천 종목
@@ -186,20 +190,22 @@ export interface SectorCell {
 	stocks: HeatmapStock[];
 }
 
-// 예측 캔들
-export interface PredictionCandle {
+// 예측 종가 — 기준 종가(base_close) × exp(누적 로그수익률), change_pct는 기준 종가 대비 %
+export interface PredictionPoint {
 	date: string;
-	open: number;
-	high: number;
-	low: number;
 	close: number;
+	change_pct: number;
 }
 
 // 예측 결과 (메트릭 포함)
 export interface PredictionResult {
 	code: string;
 	name: string;
-	predictions: PredictionCandle[];
-	metrics: { mae: number; accuracy_pct: number };
+	predictions: PredictionPoint[];
+	// 검증 구간(재학습 전)의 5일 누적 수익률(%p) 기준 — mae_zero는 0% 예측의 MAE, skill = 1 − mae/mae_zero (mae_zero가 0이면 null)
+	metrics: { mae: number; mae_zero: number; skill: number | null; n_val: number };
+	// 예측 기준 — 학습에 쓴 확정 일봉의 마지막 종가와 날짜(YYYY-MM-DD)
+	base_close: number | null;
+	base_date: string | null;
 	status: string;
 }

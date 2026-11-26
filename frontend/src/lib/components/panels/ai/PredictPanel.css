@@ -63,6 +63,26 @@
 	color: #7c3aed;
 }
 
+/* 보조 줄 (0% 예측 오차, 기준선보다 나쁨 문구) */
+.metric-sub {
+	display: block;
+	font-size: 0.625rem;
+	color: #6b7280;
+}
+
+/* 개선율 0 이하 — 상승·하락 색(빨강·파랑)과 겹치지 않는 주황 */
+.metric-value.metric-worse,
+.metric-sub.metric-worse {
+	color: #d97706;
+}
+
+/* 예측 기준 종가 */
+.predict-base {
+	font-size: 0.6875rem;
+	color: #6b7280;
+	padding: 0 0.25rem;
+}
+
 /* Prediction Table */
 .predict-table {
 	width: 100%;
@@ -113,6 +133,14 @@
 .predict-empty {
 	text-align: center;
 	color: #9ca3af;
+	padding: 2rem;
+	font-size: 0.8125rem;
+}
+
+/* 예측 실패 (429 포함) — BacktestPanel 오류 표시와 같은 색 */
+.predict-error {
+	text-align: center;
+	color: var(--color-up);
 	padding: 2rem;
 	font-size: 0.8125rem;
 }

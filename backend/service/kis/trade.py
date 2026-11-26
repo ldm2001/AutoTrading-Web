@@ -40,7 +40,7 @@ class Trade:
     # 보유 종목과 요약을 조회
     async def holdings(self) -> tuple[dict[str, dict], dict]:
         key = "holdings"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -83,13 +83,13 @@ class Trade:
             return items, summary
 
         result = await self.policy.safe(key, slot, mark="holdings", stale=False)
-        self.cache.set(key, result, self.TTL_HOLDINGS)
+        self.cache.memo(key, result, self.TTL_HOLDINGS)
         return result
 
     # 주문 가능 현금을 조회한다.
     async def cash(self) -> int:
         key = "cash"
-        cached = self.cache.get(key)
+        cached = self.cache.lookup(key)
         if cached is not None:
             return cached
 
@@ -113,7 +113,7 @@ class Trade:
             return int(resp.json()["output"]["ord_psbl_cash"])
 
         result = await self.policy.safe(key, slot, mark="cash", stale=False)
-        self.cache.set(key, result, self.TTL_CASH)
+        self.cache.memo(key, result, self.TTL_CASH)
         return result
 
     # 시장가 주문을 전송
@@ -153,7 +153,7 @@ class Trade:
                 "latency_ms": round((time.perf_counter() - started) * 1000, 1),
             })
             if ok:
-                self.cache.invalidate("holdings", "cash")
+                self.cache.eviction("holdings", "cash")
             return {"success": ok, "data": result}
         except Exception as err:
             status = None
@@ -172,9 +172,9 @@ class Trade:
             raise
 
     # 시장가 매수를 요청
-    async def buy(self, code: str, qty: int) -> dict:
+    async def purchase(self, code: str, qty: int) -> dict:
         return await self.order(code, qty, trid("buy"))
 
     # 시장가 매도를 요청
-    async def sell(self, code: str, qty: int) -> dict:
+    async def sale(self, code: str, qty: int) -> dict:
         return await self.order(code, qty, trid("sell"))

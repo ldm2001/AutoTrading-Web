@@ -11,7 +11,7 @@ from service.infra.ttl_cache import TTLCache
 
 
 # 항상 실패하는 Redis 스텁
-class _DownRedis:
+class DownRedis:
     def __init__(self) -> None:
         self.calls = 0
 
@@ -29,7 +29,7 @@ class _DownRedis:
 
 
 # 정상 동작하는 Redis 스텁
-class _UpRedis:
+class UpRedis:
     def __init__(self) -> None:
         self.store = {}
         self.calls = 0
@@ -44,7 +44,7 @@ class _UpRedis:
 
 
 # 실연결 없이 캐시 인스턴스 생성
-def build(redis_stub) -> TTLCache:
+def cacherig(redis_stub) -> TTLCache:
     with mock.patch.object(TTLCache, "conn", lambda self: None):
         cache = TTLCache()
     cache._redis = redis_stub
@@ -53,55 +53,55 @@ def build(redis_stub) -> TTLCache:
 
 class BreakerTest(unittest.TestCase):
     # 연속 실패 한도 도달 시 Redis 호출 중단
-    def test_opens_after_limit(self):
-        stub = _DownRedis()
-        cache = build(stub)
+    def testtrip(self):
+        stub = DownRedis()
+        cache = cacherig(stub)
         for _ in range(ttl_module._FAIL_LIMIT):
-            cache.get("k")
+            cache.lookup("k")
         self.assertEqual(stub.calls, ttl_module._FAIL_LIMIT)
-        cache.get("k")
-        cache.set("k", 1, 5)
+        cache.lookup("k")
+        cache.memo("k", 1, 5)
         self.assertEqual(stub.calls, ttl_module._FAIL_LIMIT)
 
     # 강등 중에도 인메모리 경로는 정상 동작
-    def test_fallback_serves_local(self):
-        cache = build(_DownRedis())
+    def testfallback(self):
+        cache = cacherig(DownRedis())
         for _ in range(ttl_module._FAIL_LIMIT):
-            cache.get("k")
-        cache.set("k", {"v": 1}, 5)
-        self.assertEqual(cache.get("k"), {"v": 1})
+            cache.lookup("k")
+        cache.memo("k", {"v": 1}, 5)
+        self.assertEqual(cache.lookup("k"), {"v": 1})
 
     # 쿨다운 경과 후 1회 재시도, 실패 시 재강등
-    def test_half_open_retry(self):
-        stub = _DownRedis()
-        cache = build(stub)
+    def testhalfopen(self):
+        stub = DownRedis()
+        cache = cacherig(stub)
         for _ in range(ttl_module._FAIL_LIMIT):
-            cache.get("k")
+            cache.lookup("k")
         cache._retry_at = time.time() - 1
-        cache.get("k")
+        cache.lookup("k")
         self.assertEqual(stub.calls, ttl_module._FAIL_LIMIT + 1)
-        cache.get("k")
+        cache.lookup("k")
         self.assertEqual(stub.calls, ttl_module._FAIL_LIMIT + 1)
 
     # 재시도 성공 시 완전 복구
-    def test_recovery(self):
-        cache = build(_DownRedis())
+    def testrecovery(self):
+        cache = cacherig(DownRedis())
         for _ in range(ttl_module._FAIL_LIMIT):
-            cache.get("k")
-        cache._redis = _UpRedis()
+            cache.lookup("k")
+        cache._redis = UpRedis()
         cache._retry_at = time.time() - 1
-        cache.set("k", {"v": 2}, 5)
+        cache.memo("k", {"v": 2}, 5)
         self.assertEqual(cache._fails, 0)
-        self.assertEqual(cache.get("k"), {"v": 2})
+        self.assertEqual(cache.lookup("k"), {"v": 2})
 
     # 강등 중 invalidate는 인메모리를 정리
-    def test_invalidate_local_when_down(self):
-        cache = build(_DownRedis())
+    def testeviction(self):
+        cache = cacherig(DownRedis())
         for _ in range(ttl_module._FAIL_LIMIT):
-            cache.get("k")
-        cache.set("holdings", {"v": 3}, 5)
-        cache.invalidate("holdings")
-        self.assertIsNone(cache.get("holdings"))
+            cache.lookup("k")
+        cache.memo("holdings", {"v": 3}, 5)
+        cache.eviction("holdings")
+        self.assertIsNone(cache.lookup("holdings"))
 
 
 if __name__ == "__main__":

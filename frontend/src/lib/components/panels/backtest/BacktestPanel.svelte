@@ -119,6 +119,8 @@
 	function why(r: string): string {
 		if (r === 'stop') return '손절';
 		if (r === 'tp') return '익절';
+		// 백테스트 구간 끝까지 보유 → 마지막 봉 종가 강제 청산
+		if (r === 'end') return '기간종료';
 		return '보유만기';
 	}
 

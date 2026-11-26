@@ -15,7 +15,7 @@ _CODE = Path(pattern=r"^\d{6}$")
 @router.get("/signal/{code}")
 @limiter.limit("20/minute")
 async def signal(request: Request, code: str = _CODE):
-    result = await pipeline.analyze(code)
+    result = await pipeline.analysis(code)
     if not result:
         raise HTTPException(502, "AI 분석 실패")
     return result

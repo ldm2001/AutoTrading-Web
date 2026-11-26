@@ -2,7 +2,7 @@
 import datetime
 import logging
 from collections.abc import Callable
-from service.infra.discord import notify
+from service.infra.discord import notice
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class Notifier:
 
     async def msg(self, text: str) -> None:
         logger.info(text)
-        await notify(text)
+        await notice(text)
         if self.onmessage:
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             await self.onmessage(f"[{now}] {text}")

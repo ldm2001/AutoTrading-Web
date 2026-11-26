@@ -18,25 +18,25 @@ async def noop(_text: str = "") -> None:
 
 
 # Redis 없는 캐시 스텁
-class _Cache:
+class CacheStub:
     redis = None
 
 
 # 틱 큐 스텁 — start만 노출
-class _Queue:
-    async def start(self) -> None:
+class QueueStub:
+    async def boot(self) -> None:
         return None
 
 
 # 최소 broker 스텁 (cache만 필요)
-class _Broker:
+class BrokerStub:
     def __init__(self) -> None:
-        self.cache = _Cache()
+        self.cache = CacheStub()
 
 
 # 테스트용 Bot 인스턴스 생성
-def _bot() -> Bot:
-    return Bot(_Broker(), _Queue(), {}, lambda: [])
+def botrig() -> Bot:
+    return Bot(BrokerStub(), QueueStub(), {}, lambda: [])
 
 
 # FR-07/08 — 봇 슈퍼바이저 (바운드 재시작 + tick 구독 누수 방지)
@@ -45,19 +45,19 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._restart = settings.bot_restart_on_crash
         self._backoff = bot_module._BACKOFF
-        self._rows = journal_module.trade_log_rows
-        journal_module.trade_log_rows = lambda: []
+        self._rows = journal_module.traderows
+        journal_module.traderows = lambda: []
 
     # 교체했던 전역 복원
     def tearDown(self) -> None:
         settings.bot_restart_on_crash = self._restart
         bot_module._BACKOFF = self._backoff
-        journal_module.trade_log_rows = self._rows
+        journal_module.traderows = self._rows
 
     # T9 — restart off: 보유 종목 포함 경보 + crashed=True + 재시작 없음
-    async def test_t9(self):
+    async def testt9(self):
         settings.bot_restart_on_crash = False
-        bot = _bot()
+        bot = botrig()
         bot.bought = {"005930": {"name": "삼성전자", "qty": 1, "avg_price": 70000}}
         captured: list[str] = []
 
@@ -76,7 +76,7 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         bot.loop = boom
 
-        await bot.run()
+        await bot.supervisor()
 
         self.assertEqual(loops["n"], 1)
         self.assertTrue(bot.crashed)
@@ -87,10 +87,10 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("재시작" in m for m in captured))
 
     # T10 — restart on + 장중: 백오프 재시작 3회 후 4회째 포기 (재대조 동반)
-    async def test_t10(self):
+    async def testt10(self):
         settings.bot_restart_on_crash = True
         bot_module._BACKOFF = (0, 0, 0)
-        bot = _bot()
+        bot = botrig()
         bot.hours = lambda: True
         captured: list[str] = []
 
@@ -114,12 +114,12 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
         bot.redo = lambda: redos.__setitem__("n", redos["n"] + 1)
         pends = {"n": 0}
 
-        async def fakepend() -> None:
+        async def pendstub() -> None:
             pends["n"] += 1
 
-        bot.pend = fakepend
+        bot.pend = pendstub
 
-        await bot.run()
+        await bot.supervisor()
 
         self.assertEqual(loops["n"], 4)
         self.assertEqual(redos["n"], 3)
@@ -130,10 +130,10 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(restarts), 3)
 
     # T12 — 재시작 직후 재대조(pend) 예외에도 재시작 계속 — 전파되면 crashed=False인 채 슈퍼바이저 소멸
-    async def test_t12(self):
+    async def testt12(self):
         settings.bot_restart_on_crash = True
         bot_module._BACKOFF = (0, 0, 0)
-        bot = _bot()
+        bot = botrig()
         bot.hours = lambda: True
         bot.msg = noop
         bot.redo = lambda: None
@@ -154,15 +154,15 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
 
         bot.pend = badpend
 
-        await bot.run()
+        await bot.supervisor()
 
         self.assertEqual(loops["n"], 2)
         self.assertFalse(bot.crashed)
 
     # T11 — FR-08: start→자연종료→start 반복 시 tick 핸들러 누적 없음
-    async def test_t11(self):
+    async def testt11(self):
         base = len(bus._handlers.get("tick", []))
-        bot = _bot()
+        bot = botrig()
 
         # msg 캡처(무시)
         async def cap(_text: str) -> None:
@@ -179,7 +179,7 @@ class BotSupervisorTest(unittest.IsolatedAsyncioTestCase):
 
             bot.loop = waitloop
 
-            await bot.start()
+            await bot.boot()
             self.assertEqual(len(bus._handlers.get("tick", [])), base + 1)
 
             release.set()

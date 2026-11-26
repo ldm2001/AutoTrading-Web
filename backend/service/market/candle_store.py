@@ -24,7 +24,7 @@ class Candle:
         self.ts = ts
 
     # 고가/저가/종가/거래량 갱신
-    def update(self, price: int, volume: int) -> None:
+    def tick(self, price: int, volume: int) -> None:
         self.h = max(self.h, price)
         self.l = min(self.l, price)
         self.c = price
@@ -54,7 +54,7 @@ class CandleStore:
         self._lock = asyncio.Lock()
 
     # 틱 데이터를 15분/60분봉 버킷에 반영
-    async def ingest(self, code: str, price: int, volume: int,
+    async def intake(self, code: str, price: int, volume: int,
                      ts: datetime.datetime | None = None) -> None:
         ts = ts or datetime.datetime.now()
         async with self._lock:
@@ -62,7 +62,7 @@ class CandleStore:
                 bk = self.bucket(ts, interval)
                 bucket = self._buf[code][interval]
                 if bk in bucket:
-                    bucket[bk].update(price, volume)
+                    bucket[bk].tick(price, volume)
                 else:
                     bucket[bk] = Candle(price, volume, self.slot(ts, interval))
 
@@ -72,7 +72,7 @@ class CandleStore:
         return [c.snapshot() for c in sorted(bucket.values(), key=lambda c: c.ts)]
 
     # 장 마감 후 모든 종목의 캔들을 parquet/csv로 저장
-    async def flush(self, date_str: str | None = None) -> int:
+    async def checkpoint(self, date_str: str | None = None) -> int:
         date_str = date_str or datetime.date.today().isoformat()
         saved = 0
         async with self._lock:
@@ -90,7 +90,7 @@ class CandleStore:
         return saved
 
     # 저장된 과거 분봉 로드 (csv)
-    def load(self, code: str, interval: int = 15,
+    def archive(self, code: str, interval: int = 15,
              date_str: str | None = None) -> list[dict]:
         date_str = date_str or datetime.date.today().isoformat()
         path = self.path(code, interval, date_str)

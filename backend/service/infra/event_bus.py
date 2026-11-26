@@ -18,7 +18,7 @@ class EventBus:
         self._local_queue: asyncio.Queue | None = None
 
     # Redis 연결 설정
-    def bind(self, redis_client) -> None:
+    def binding(self, redis_client) -> None:
         self._redis = redis_client
 
     # 이벤트 핸들러 등록 — 해제 함수 반환
@@ -36,11 +36,11 @@ class EventBus:
         return off
 
     # 특정 이벤트의 모든 핸들러 해제
-    def unbind(self, event: str) -> None:
+    def unbinding(self, event: str) -> None:
         self._handlers.pop(event, None)
 
     # 이벤트 발행
-    async def emit(self, event: str, data: Any = None) -> None:
+    async def event(self, event: str, data: Any = None) -> None:
         payload = json.dumps({"event": event, "data": data}, default=str)
 
         if self._redis is not None:
@@ -59,7 +59,7 @@ class EventBus:
             pass
 
     # 구독 루프 시작
-    async def start(self) -> None:
+    async def boot(self) -> None:
         if self._redis is not None:
             self._task = asyncio.create_task(self.rloop())
         else:
@@ -67,7 +67,7 @@ class EventBus:
         logger.info("EventBus started (redis=%s)", self._redis is not None)
 
     # 구독 루프 중지
-    async def stop(self) -> None:
+    async def shutdown(self) -> None:
         if self._task:
             self._task.cancel()
             try:
@@ -91,7 +91,7 @@ class EventBus:
                 if msg and msg["type"] == "message":
                     try:
                         payload = json.loads(msg["data"])
-                        await self.fire(payload["event"], payload.get("data"))
+                        await self.fanout(payload["event"], payload.get("data"))
                     except Exception as e:
                         logger.debug("EventBus dispatch error: %s", e)
         except asyncio.CancelledError:
@@ -113,14 +113,14 @@ class EventBus:
             while True:
                 try:
                     payload = await asyncio.wait_for(self._local_queue.get(), timeout=1.0)
-                    await self.fire(payload["event"], payload.get("data"))
+                    await self.fanout(payload["event"], payload.get("data"))
                 except TimeoutError:
                     continue
         except asyncio.CancelledError:
             pass
 
     # 핸들러 디스패치
-    async def fire(self, event: str, data: Any) -> None:
+    async def fanout(self, event: str, data: Any) -> None:
         handlers = list(self._handlers.get(event, []))
         for handler in handlers:
             try:

@@ -5,6 +5,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from config import settings
+from service.ai.spec import VERSION
 from service.market import indicators
 from service.market import smc
 from service.trading.ports import Quotes
@@ -42,7 +44,7 @@ class FactorInput:
     fast: bool
 
 # 15분봉 FVG 팩터 — fast/데이터부족 시 특수 사유
-def _fvg15factor(s, fi: FactorInput) -> tuple[float, str]:
+def fvg15factor(s, fi: FactorInput) -> tuple[float, str]:
     if fi.fast:
         return 0.0, "1단계 스크리닝에서 제외"
     if fi.candles_15m:
@@ -50,12 +52,42 @@ def _fvg15factor(s, fi: FactorInput) -> tuple[float, str]:
     return 0.0, "15분봉 데이터 부족"
 
 # BOS/CHoCH 구조 팩터 — fast/데이터부족 시 특수 사유
-def _structfactor(s, fi: FactorInput) -> tuple[float, str]:
+def structfactor(s, fi: FactorInput) -> tuple[float, str]:
     if fi.fast:
         return 0.0, "1단계 스크리닝에서 제외"
     if fi.candles_15m:
         return s.struct(fi.candles_15m)
     return 0.0, "15분봉 데이터 부족"
+
+# 매매 점수의 문 — Direction은 여기가 열릴 때("")만 0이 아님, 닫히면 0점 사유 (판정은 이 함수 한 곳, Scorer.pred만 부름)
+# 열림 = 플래그 True + 예측 출처 pooled + 예측 validated True + 예측 사양 = 지금 VERSION + 지금 읽힌 공용 모델 메타도 validated True·같은 사양
+# 공용 모델 확인은 앞 조건을 다 지난 경우만 (기본 경로에서 가중치 파일·torch를 읽지 않음), 확인 실패는 경고 + 닫힘
+def predgate(prediction) -> str:
+    if not settings.use_prediction:
+        return "예측 연동 꺼짐"
+    if not isinstance(prediction, dict):
+        return "예측 형식 오류"
+    if prediction.get("source") != "pooled":
+        return "공용 모델 예측 아님"
+    if prediction.get("validated") is not True:
+        return "검증 전 예측"
+    if prediction.get("spec") != VERSION:
+        return "예측 사양 불일치"
+    try:
+        # 지연 임포트 (torch) — 서비스 프로세스에서는 api/stock이 이미 읽어 둠
+        from service.ai.predict import predictor
+        pool = predictor.bundle()
+    except Exception as e:
+        logger.warning(f"공용 모델 확인 실패 — Direction 0점: {e}")
+        return "공용 모델 확인 실패"
+    if not isinstance(pool, dict):
+        return "공용 모델 없음"
+    meta = pool.get("meta")
+    if not isinstance(meta, dict) or meta.get("validated") is not True:
+        return "공용 모델 검증 전"
+    if meta.get("version") != VERSION:
+        return "공용 모델 사양 불일치"
+    return ""
 
 # 팩터 레지스트리 — (이름, 최대점수, 계산함수). 신규 팩터는 여기에 추가만 (OCP)
 _FACTORS = [
@@ -66,8 +98,8 @@ _FACTORS = [
     ("Direction",  W_PREDICT, lambda s, fi: s.pred(fi.prediction, fi.price)),
     ("FVG",        W_FVG,     lambda s, fi: s.fvg(fi.candles, fi.price)),
     ("OrderBlock", W_OB,      lambda s, fi: s.ob(fi.candles, fi.price)),
-    ("FVG 15m",    W_FVG_15M, _fvg15factor),
-    ("Structure",  W_STRUCT,  _structfactor),
+    ("FVG 15m",    W_FVG_15M, fvg15factor),
+    ("Structure",  W_STRUCT,  structfactor),
 ]
 
 # 9팩터 스코어링 엔진
@@ -77,7 +109,7 @@ class Scorer:
         self._broker = broker
 
     # 합성 루트에서 broker 주입
-    def bind(self, broker: Quotes) -> None:
+    def binding(self, broker: Quotes) -> None:
         self._broker = broker
 
     # broker 반환 (미주입 시 fail-fast — 서비스 로케이터 제거)
@@ -202,17 +234,30 @@ class Scorer:
         except Exception:
             return 0.0, "구조 분석 오류"
 
-    # Transformer 예측 → 방향성 필터 (-10 ~ +10)
+    # Transformer 예측 → 방향성 필터 (-10 ~ +10) — 봇·추천·백테스트가 모두 여기를 지남, 문(predgate)이 열릴 때만 규칙대로 채점
     def pred(self, prediction: dict | None, price: int) -> tuple[float, str]:
+        if prediction is None:
+            return 0, "예측 데이터 없음"
+        shut = predgate(prediction)
+        if shut:
+            return 0, shut
+        return self.labscore(prediction, price)
+
+    # 문 없는 Direction 규칙 — 서비스 코드는 pred(문 통과 뒤)로만 부름, 직접 부르는 것은 오프라인 하네스뿐 (tests/test_gate.py가 고정)
+    # 기준은 학습에 쓴 확정 일봉의 마지막 종가(base_close) — price는 호출 형태 유지용으로만 받음
+    def labscore(self, prediction: dict | None, price: int | None = None) -> tuple[float, str]:
         if prediction is None:
             return 0, "예측 데이터 없음"
         preds = prediction.get("predictions", [])
         if not preds:
             return 0, "예측 결과 없음"
+        base = prediction.get("base_close")
+        if not base:
+            return 0, "예측 기준가 없음"
         last_close  = preds[-1]["close"]
-        change_pct  = (last_close - price) / price * 100
+        change_pct  = (last_close - base) / base * 100
         uptrend_cnt = 0
-        prev        = price
+        prev        = base
         for p in preds:
             if p["close"] > prev:
                 uptrend_cnt += 1
@@ -230,10 +275,10 @@ class Scorer:
 
     # 종목 종합 평가 (멀티팩터 + 15분봉 FVG 앙상블)
     # fast=True: 1단계 스크리닝용 (15분봉 스킵 → API 호출 2건으로 축소)
-    async def evaluate(self, code: str, prediction: dict | None = None, fast: bool = False) -> dict:
+    async def verdict(self, code: str, prediction: dict | None = None, fast: bool = False) -> dict:
         cache_key = self.ckey(code, fast=fast, prediction=prediction)
         if cache_key is not None:
-            cached = _cache.get(cache_key)
+            cached = _cache.lookup(cache_key)
             if cached is not None:
                 return cached
         try:
@@ -267,7 +312,7 @@ class Scorer:
 
             # 동적 손절가는 full 평가 + 실제 15분봉 데이터가 있을 때만 계산
             stop_price = (
-                smc.stop(candles_15m, float(current_price))
+                smc.slprice(candles_15m, float(current_price))
                 if candles_15m
                 else None
             )
@@ -292,7 +337,7 @@ class Scorer:
             }
 
             if cache_key is not None:
-                _cache.set(cache_key, result, _TTL)
+                _cache.memo(cache_key, result, _TTL)
             return result
 
         except Exception as e:
@@ -310,4 +355,4 @@ class Scorer:
 scorer = Scorer()
 
 # 하위 호환
-evaluate = scorer.evaluate
+verdict = scorer.verdict

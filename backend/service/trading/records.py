@@ -2,7 +2,7 @@
 import datetime
 import json
 from pathlib import Path
-from service.infra.elk import order as elk_order
+from service.infra.elk import order as elkorder
 
 _BASE = Path(__file__).resolve().parent.parent / "trades"
 
@@ -21,12 +21,12 @@ class JsonlLog:
         return self._dir / f"{date}.jsonl"
 
     # 로그 한 줄 추가 (+ES 인덱싱)
-    def append(self, entry: dict) -> None:
+    def record(self, entry: dict) -> None:
         f = self.path()
         line = json.dumps(entry, ensure_ascii=False)
         with f.open("a", encoding="utf-8") as fp:
             fp.write(line + "\n")
-        elk_order(entry)
+        elkorder(entry)
 
     # 날짜별 로그 조회
     def rows(self, date: str | None = None) -> list[dict]:

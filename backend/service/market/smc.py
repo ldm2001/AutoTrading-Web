@@ -226,7 +226,7 @@ def bos(candles: list[dict], swing_length: int = 5) -> dict:
     return {"bos": 0, "choch": 0, "level": 0.0}
 
 # FVG/OB 구간 진입 시 mitigated=True 마킹
-def mitigate(zones: list[dict], price: float) -> None:
+def mitigation(zones: list[dict], price: float) -> None:
     for z in zones:
         if z["mitigated"]:
             continue
@@ -367,7 +367,7 @@ def fvgin(candles_15m: list[dict], price: float) -> tuple[float, str, dict | Non
 
 
 # FVG 기반 구조적 손절가 — 가장 가까운 Bullish FVG 하단 (지지선)
-def stop(candles: list[dict], price: float) -> float | None:
+def slprice(candles: list[dict], price: float) -> float | None:
     fvgs = fvgz(candles)
     sweep(candles, fvgs)
     bull_below = [z for z in livez(fvgs)

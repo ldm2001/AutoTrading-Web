@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import api.ws as ws_module
 
 
-class _WS:
+class WSStub:
     def __init__(self, headers: dict[str, str]) -> None:
         self.headers = headers
         self.closed_code: int | None = None
@@ -31,7 +31,7 @@ class WebSocketSecurityTest(unittest.TestCase):
     def tearDown(self) -> None:
         ws_module.settings.api_key = self._api_key
 
-    def test_trade_websocket_requires_allowed_origin_and_api_key(self):
+    def testtradews(self):
         self.assertTrue(ws_module.wsok({
             "origin": "http://127.0.0.1:5173",
             "x-api-key": "server-secret",
@@ -45,8 +45,8 @@ class WebSocketSecurityTest(unittest.TestCase):
             "x-api-key": "wrong-secret",
         }))
 
-    def test_price_websocket_uses_same_auth_gate(self):
-        ws = _WS({
+    def testpricews(self):
+        ws = WSStub({
             "origin": "http://evil.example",
             "x-api-key": "server-secret",
         })

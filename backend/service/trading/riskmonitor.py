@@ -20,7 +20,7 @@ class RiskMonitor:
         self._risk_last: float = 0.0
 
     # 봇 시작 시 카운터 초기화
-    def reset(self) -> None:
+    def blank(self) -> None:
         self._sl_fails = {}
         self._risk_last = 0.0
 
@@ -63,7 +63,7 @@ class RiskMonitor:
                     await self.notifier.msg(
                         f"[손절] {info['name']}({code}) 수익률 {pnl:.2f}% (기준: {label})"
                     )
-                    result = await self.broker.sell(code, info["qty"])
+                    result = await self.broker.sale(code, info["qty"])
                     await self.journal.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         wfout(code, "stop", cp, info["qty"], pnl)
@@ -75,7 +75,7 @@ class RiskMonitor:
                     await self.notifier.msg(
                         f"[익절] {info['name']}({code}) 수익률 +{pnl:.2f}% ≥ +{settings.take_profit_pct}%"
                     )
-                    result = await self.broker.sell(code, info["qty"])
+                    result = await self.broker.sale(code, info["qty"])
                     await self.journal.rec(code, info["name"], "sell", info["qty"], cp, result["success"])
                     if result["success"]:
                         wfout(code, "profit", cp, info["qty"], pnl)
@@ -95,7 +95,7 @@ class RiskMonitor:
                 self.positions.drop(code)
                 continue
             name = info.get("name") or tracked.get("name") or self.names.get(code, code)
-            result = await self.broker.sell(code, qty)
+            result = await self.broker.sale(code, qty)
             cp = int(info.get("current_price", 0))
             await self.journal.rec(code, name, "sell", qty, cp, result["success"])
             if result["success"]:

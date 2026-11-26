@@ -10,9 +10,9 @@ from service.trading.entryengine import EntryEngine
 from service.trading.journal import TradeJournal
 from service.trading.positionbook import PositionBook
 from service.trading.riskmonitor import RiskMonitor
-from service.market.holidays import mkt
+from service.market.holidays import mkt, unregistered
 from service.market.tick_queue import TickQueue, tick_q
-from service.trading.watchlist import symbols as watchlist_symbols
+from service.trading.watchlist import symbols as watchsyms
 from service.infra.event_bus import bus
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ class Bot:
         self.crashed: bool = False
         self._soldout: bool = False
         self._sell_next: datetime.datetime | None = None
+        # 휴장일 미등록 경보를 마지막으로 검사한 날 — 재기동해도 같은 날 중복 경보 없음
+        self._cal_day: datetime.date | None = None
 
     # 보유 포지션 상태 (PositionBook 위임 — 공개/테스트 호환)
     @property
@@ -60,11 +62,11 @@ class Bot:
         self.positions.bought = v
 
     @property
-    def pending_buys(self) -> set[str]:
+    def pendbuys(self) -> set[str]:
         return self.positions.pending_buys
 
-    @pending_buys.setter
-    def pending_buys(self, v: set[str]) -> None:
+    @pendbuys.setter
+    def pendbuys(self, v: set[str]) -> None:
         self.positions.pending_buys = v
 
     # Redis 영속 위임 (재시작 복원 — supervisor/테스트 시임)
@@ -72,15 +74,15 @@ class Bot:
         self.positions.redo()
 
     # 봇 시작 — 오늘 거래 내역 복원 후 루프 실행
-    async def start(self) -> None:
+    async def boot(self) -> None:
         if self.running:
             return
         self.running = True
         self.crashed = False
-        self.positions.reset()
-        self.risks.reset()
+        self.positions.blank()
+        self.risks.blank()
         self.redo()
-        self.journal.load()
+        self.journal.recovery()
 
         # 복원 대조 — 봇 미추적 보유 경보 (bot:state 유실·수동 보유 가시화), 실패해도 기동 계속
         try:
@@ -91,7 +93,9 @@ class Bot:
         except Exception as e:
             logger.warning("Untracked holdings check failed: %s", e)
 
-        await self.queue.start()
+        await self.calendar(datetime.date.today())
+
+        await self.queue.boot()
 
         # 이벤트 버스 구독 — tick 이벤트로 보유종목 실시간 체크
         def tickcb(_event: str, data: dict) -> None:
@@ -100,11 +104,11 @@ class Bot:
                 self._tick_event.set()
         self._unsub_tick = bus.on("tick", tickcb)
 
-        self._task = asyncio.create_task(self.run())
+        self._task = asyncio.create_task(self.supervisor())
         await self.msg(f"=== 자동매매 시작 ({'모의투자' if settings.mock else '실전투자'}) ===")
 
     # 봇 중지 — tick 핸들러 해제 후 봇 루프 종료
-    async def stop(self) -> None:
+    async def shutdown(self) -> None:
         self.running = False
         if self._unsub_tick:
             self._unsub_tick()
@@ -164,24 +168,37 @@ class Bot:
 
     # 손절 카운터 상태 (RiskMonitor 위임 — 테스트 호환)
     @property
-    def _sl_fails(self) -> dict[str, int]:
+    def slfails(self) -> dict[str, int]:
         return self.risks._sl_fails
 
-    @_sl_fails.setter
-    def _sl_fails(self, v: dict[str, int]) -> None:
+    @slfails.setter
+    def slfails(self, v: dict[str, int]) -> None:
         self.risks._sl_fails = v
 
     @property
-    def _risk_last(self) -> float:
+    def risklast(self) -> float:
         return self.risks._risk_last
 
-    @_risk_last.setter
-    def _risk_last(self, v: float) -> None:
+    @risklast.setter
+    def risklast(self, v: float) -> None:
         self.risks._risk_last = v
 
     # 손절/익절 감시 위임 (RiskMonitor)
     async def riskgate(self) -> None:
         await self.risks.riskgate()
+
+    # 휴장일 테이블 미등록 경보 — 기동 시·날짜가 바뀐 뒤 첫 호출에 1회, 실패는 로그만 (기동·루프 비차단)
+    async def calendar(self, today: datetime.date) -> None:
+        if today == self._cal_day:
+            return
+        self._cal_day = today
+        try:
+            years = unregistered(today)
+            if years:
+                listed = ", ".join(f"{y}년" for y in years)
+                await self.msg(f"[휴장일 미등록] {listed} KRX 휴장일 테이블이 없습니다. 주말만 휴장으로 판정합니다")
+        except Exception as e:
+            logger.warning("Holiday table alert failed: %s", e)
 
     # 장중 여부 (개장일 09:05~15:15) — KST 명시는 Phase 2에서
     def hours(self) -> bool:
@@ -210,7 +227,7 @@ class Bot:
         for sym in self.scan():
             if len(self.bought) >= settings.target_buy_count:
                 break
-            if sym in self.bought or sym in self.pending_buys:
+            if sym in self.bought or sym in self.pendbuys:
                 continue
             await self.ent(sym, buy_amount)
             await asyncio.sleep(1)
@@ -223,7 +240,7 @@ class Bot:
             logger.exception("EOD liquidation failed")
             await self.msg(f"[장마감 청산 오류] {e} — {_EOD_RETRY}초 후 재시도")
             return False
-        return not (self.bought or self.pending_buys)
+        return not (self.bought or self.pendbuys)
 
     # 장마감 청산 + 종료 판정 — 15:15~15:20 잔여 있으면 재시도, 15:20 이후 잔여 경보 후 True (루프 종료)
     async def closeout(self, now: datetime.datetime) -> bool:
@@ -238,7 +255,7 @@ class Bot:
         if now > t_exit:
             left = [
                 f"{self.bought.get(c, {}).get('name') or self.names.get(c, c)}({c})"
-                for c in sorted(set(self.bought) | self.pending_buys)
+                for c in sorted(set(self.bought) | self.pendbuys)
             ]
             if left:
                 await self.msg(f"[장마감 청산 미완료] {', '.join(left)} — 오버나이트 보유, 수동 확인 필요")
@@ -247,7 +264,7 @@ class Bot:
         return False
 
     # 슈퍼바이저 — loop 예외 시 경보 + 바운드 재시작 (장중 한정), 종료 시 구독 정리
-    async def run(self) -> None:
+    async def supervisor(self) -> None:
         attempts = 0
         try:
             while True:
@@ -323,6 +340,9 @@ class Bot:
                 t_start = now.replace(hour=9, minute=5, second=0, microsecond=0)
                 t_sell = now.replace(hour=15, minute=15, second=0, microsecond=0)
 
+                # 날짜가 바뀐 뒤 첫 회차에 휴장일 미등록 경보 (같은 날이면 즉시 반환)
+                await self.calendar(now.date())
+
                 if not mkt(now.date()):
                     await self.msg("주말/휴장일이므로 프로그램을 종료합니다.")
                     break
@@ -358,4 +378,4 @@ class Bot:
             raise
 
 # 모듈 레벨 Bot 싱글턴 인스턴스
-bot = Bot(kis, tick_q, NAMES, watchlist_symbols)
+bot = Bot(kis, tick_q, NAMES, watchsyms)

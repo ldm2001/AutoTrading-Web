@@ -17,7 +17,7 @@ class KisModeTest(unittest.TestCase):
         settings.url_base = self._url
 
     # 실전 URL → TTTC* + mock=False
-    def test_real(self):
+    def testreal(self):
         settings.url_base = "https://openapi.koreainvestment.com:9443"
         self.assertFalse(settings.mock)
         self.assertEqual(trid("buy"), "TTTC0802U")
@@ -26,7 +26,7 @@ class KisModeTest(unittest.TestCase):
         self.assertEqual(trid("cash"), "TTTC8908R")
 
     # 모의 URL → VTTC* + mock=True
-    def test_mock(self):
+    def testmock(self):
         settings.url_base = "https://openapivts.koreainvestment.com:29443"
         self.assertTrue(settings.mock)
         self.assertEqual(trid("buy"), "VTTC0802U")

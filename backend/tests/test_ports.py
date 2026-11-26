@@ -7,13 +7,13 @@ from service.trading.ports import Account, Orders, Quotes
 
 # KIS facade가 매매 도메인 포트를 구조적으로 충족하는지 (ISP/DIP 계약)
 class PortsConformanceTest(unittest.TestCase):
-    def test_kis_satisfies_quotes(self):
+    def testquotes(self):
         self.assertIsInstance(kis, Quotes)
 
-    def test_kis_satisfies_account(self):
+    def testaccount(self):
         self.assertIsInstance(kis, Account)
 
-    def test_kis_satisfies_orders(self):
+    def testorders(self):
         self.assertIsInstance(kis, Orders)
 
 if __name__ == "__main__":
